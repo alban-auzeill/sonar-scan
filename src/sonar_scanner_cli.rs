@@ -34,12 +34,12 @@ pub fn download_scanner(options: &ScannerOptions,  out: &mut impl Write) -> Resu
 
     let url = SCANNER_URL
         .replace("{version}", effective_version)
-        .replace("{os}", &scanner_os)
+        .replace("{os}", scanner_os)
         .replace("{arch}", &options.arch);
 
     let scanner_dir_name = SCANNER_DIR
         .replace("{version}", effective_version)
-        .replace("{os}", &scanner_os)
+        .replace("{os}", scanner_os)
         .replace("{arch}", &options.arch);
 
     let scanner_dir = options.sonar_cache.join(&scanner_dir_name);

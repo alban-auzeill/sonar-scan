@@ -284,47 +284,47 @@ pub struct ScannerOptions {
     pub dump: bool,
 }
 
-pub fn default_os() -> Result<String, String> {
+pub fn default_os() -> Result<&'static str, String> {
     match env::consts::OS {
         "linux" => {
             let is_alpine = std::fs::read_to_string("/etc/os-release")
                 .map(|content| content.lines().any(|line| line == "ID=alpine"))
                 .unwrap_or(false);
-            Ok(if is_alpine { "alpine" } else { "linux" }.to_string())
+            Ok(if is_alpine { "alpine" } else { "linux" })
         }
-        "macos" => Ok("macos".to_string()),
-        "windows" => Ok("windows".to_string()),
+        "macos" => Ok("macos"),
+        "windows" => Ok("windows"),
         os => Err(format!("unsupported operating system: {os}")),
     }
 }
 
-pub fn resolve_os_alias(os: &str) -> String {
+pub fn resolve_os_alias(os: &str) -> &str {
     match os.to_lowercase().as_str() {
-        "linux" | "gnu/linux" | "unix" => "linux".to_string(),
-        "alpine" | "alpinelinux" | "alpine-linux" => "alpine".to_string(),
-        "macos" | "mac" | "macosx" | "darwin" | "osx" => "macos".to_string(),
-        "windows" | "win" | "win32" | "win64" => "windows".to_string(),
+        "linux" | "gnu/linux" | "unix" => "linux",
+        "alpine" | "alpinelinux" | "alpine-linux" => "alpine",
+        "macos" | "mac" | "macosx" | "darwin" | "osx" => "macos",
+        "windows" | "win" | "win32" | "win64" => "windows",
         s if s.starts_with("mingw") || s.starts_with("cygwin") || s.starts_with("msys") => {
-            "windows".to_string()
+            "windows"
         }
-        _ => os.to_string(),
+        _ => os,
     }
 }
 
-pub fn resolve_arch_alias(arch: &str) -> String {
+pub fn resolve_arch_alias(arch: &str) -> &str {
     match arch.to_lowercase().as_str() {
-        "x64" | "x86_64" | "x86-64" | "amd64" => "x64".to_string(),
-        "aarch64" | "arm64" => "aarch64".to_string(),
-        _ => arch.to_string(),
+        "x64" | "x86_64" | "x86-64" | "amd64" => "x64",
+        "aarch64" | "arm64" => "aarch64",
+        _ => arch,
     }
 }
 
-pub fn default_arch() -> Result<String, String> {
+pub fn default_arch() -> Result<&'static str, String> {
     // Unsupported: m68k, mips, mips32r6, mips64, mips64r6, csky, powerpc, powerpc64, riscv32,
     //              riscv64, s390x, sparc, sparc64, hexagon, loongarch32, loongarch64
     match env::consts::ARCH {
-        "x86_64" | "x86" => Ok("x64".to_string()),
-        "aarch64" | "arm" => Ok("aarch64".to_string()),
+        "x86_64" | "x86" => Ok("x64"),
+        "aarch64" | "arm" => Ok("aarch64"),
         arch => Err(format!("unsupported architecture: {arch}")),
     }
 }
@@ -370,11 +370,17 @@ pub fn parse_options(
 
     let os_from_env = env_fn("SONAR_SCANNER_OS");
     let mut os_explicit = os_from_env.is_some();
-    let mut os = os_from_env.map(Ok).unwrap_or_else(default_os)?;
+    let mut os: String = match os_from_env {
+        Some(v) => v,
+        None => default_os()?.to_owned(),
+    };
 
     let arch_from_env = env_fn("SONAR_SCANNER_ARCH");
     let mut arch_explicit = arch_from_env.is_some();
-    let mut arch = arch_from_env.map(Ok).unwrap_or_else(default_arch)?;
+    let mut arch: String = match arch_from_env {
+        Some(v) => v,
+        None => default_arch()?.to_owned(),
+    };
 
     let mut skip_jre_provisioning = env_fn("SONAR_SCANNER_SKIP_JRE_PROVISIONING")
         .map(|v| v == "true")
@@ -448,10 +454,10 @@ pub fn parse_options(
         } else if let Some(v) = arg_value(arg, "--tests", args, &mut i) {
             tests = Some(v);
         } else if let Some(v) = arg_value(arg, "--os", args, &mut i) {
-            os = resolve_os_alias(&v);
+            os = resolve_os_alias(&v).to_owned();
             os_explicit = true;
         } else if let Some(v) = arg_value(arg, "--arch", args, &mut i) {
-            arch = resolve_arch_alias(&v);
+            arch = resolve_arch_alias(&v).to_owned();
             arch_explicit = true;
         } else if let Some(v) = arg_value(arg, "--java-exe-path", args, &mut i) {
             java_exe_path = Some(PathBuf::from(v));
@@ -521,8 +527,8 @@ pub fn parse_options(
                     "sonar.analysis.buildNumber" => build_number = Some(val),
                     "sonar.sources" => sources = Some(val),
                     "sonar.tests" => tests = Some(val),
-                    "sonar.scanner.os" => { os = resolve_os_alias(&val); os_explicit = true; }
-                    "sonar.scanner.arch" => { arch = resolve_arch_alias(&val); arch_explicit = true; }
+                    "sonar.scanner.os" => { os = resolve_os_alias(&val).to_owned(); os_explicit = true; }
+                    "sonar.scanner.arch" => { arch = resolve_arch_alias(&val).to_owned(); arch_explicit = true; }
                     "sonar.scanner.skipJreProvisioning" => skip_jre_provisioning = val == "true",
                     "sonar.scanner.javaExePath" => java_exe_path = Some(PathBuf::from(val)),
                     "sonar.scanner.proxyHost" => proxy_host = Some(val),
@@ -732,13 +738,13 @@ mod tests {
     #[test]
     fn default_os_returns_known_value() {
         let os = default_os().expect("current OS should be supported");
-        assert!(["linux", "macos", "windows"].contains(&os.as_str()));
+        assert!(["linux", "alpine", "macos", "windows"].contains(&os));
     }
 
     #[test]
     fn default_arch_returns_known_value() {
         let arch = default_arch().expect("current arch should be supported");
-        assert!(["x64", "aarch64"].contains(&arch.as_str()));
+        assert!(["x64", "aarch64"].contains(&arch));
     }
 
     #[test]

@@ -20,9 +20,7 @@ fn log(out: &mut impl Write, message: &str) {
     let now = Local::now();
     #[cfg(test)]
     let now = Local.with_ymd_and_hms(2026, 6, 16, 12, 0, 0).unwrap();
-
-    let timestamp = now.format("%H:%M:%S%.3f").to_string();
-    writeln!(out, "{timestamp} {}", message).ok();
+    writeln!(out, "{} {}", now.format("%H:%M:%S%.3f"), message).ok();
 }
 
 fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, String> {
