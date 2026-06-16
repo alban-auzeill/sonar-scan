@@ -75,3 +75,7 @@ If `sonar-scan` is located elsewhere, pass the project directory as an argument:
 ```bash
 ./sonar-scan --dir /path/to/project
 ```
+
+## License
+
+This project is licensed under the [GNU Lesser General Public License v3.0](LICENSE).
