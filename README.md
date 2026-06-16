@@ -1,79 +1,36 @@
 # sonar-scan
 
-A simple command-line tool to run SonarQube analysis on any project without modifying your build configuration.
+`sonar-scan` is a native Rust wrapper around the [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/sonarscanner) that allows you
+to run SonarQube analysis on any project without modifying your build configuration, without installing Java or downloading the SonarScanner CLI with a preinstalled JVM.
 
-No Sonar Maven plugin, Gradle plugin, or project-level setup required. Just download the binary and run it.
+Benefit:
 
-# Building the project
+* Provided with portable scan.sh and scan.cmd scripts that automatically download the sonar-scan binary for your platform. Use '${HOME}/.sonar/cache' to cache the binary for future runs.
+* Extract the SonarScanner CLI jar from the sonar-scan binary itself.
+* Download the Java Runtime Environment (JRE) from the targeted SonarQube Server/Cloud. Use '${HOME}/.sonar/cache' to cache the JRE for future runs and SonarScanner CLI will not have to download it again.
+* Requires the smallest possible configuration to be able to benefit from a basic SonarQube analysis without having to configure a Maven, Gradle, npm, or other build system plugin.
+* Display complete usage syntax and options with `--help`.
+* The only require parameters are the security token (--token) and the server URL if it is different from https://sonarcloud.io
 
-## Requirements
 
-- A running [SonarQube](https://www.sonarsource.com/products/sonarqube/) instance
-- SonarQube project credentials (project key, token, and server URL)
-
-To build from source:
-
-- [Rust](https://www.rust-lang.org/tools/install) (edition 2024, Rust 1.85+)
-- [Zig](https://ziglang.org/download/) + [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) - `brew install zig && cargo install cargo-zigbuild` - Linux targets (no Docker needed)
-- [cargo-xwin](https://github.com/rust-cross/cargo-xwin) - `cargo install cargo-xwin` - Windows MSVC targets (downloads the Windows SDK, works on Linux/macOS)
-- [LLVM](https://llvm.org/) - `brew install llvm` - required by `cargo-xwin` for Windows targets on macOS
-- macOS targets require a macOS host (native `cargo`, no extra tools needed)
-
-## Build instructions
-
-Download the latest version of the sonar-scanner-cli jar:
-```bash
-./download-sonar-scanner.sh
-```
-
-Or a specific version:
-```bash
-./download-sonar-scanner.sh 8.1.0.6389
-```
-
-To build for the current host only:
+## Help
 
 ```bash
-./build.sh
-```
-
-The binary will be available at `target/release/sonar-scan`.
-
-To build release binaries for all supported platforms (Linux, Windows, macOS × x86\_64 and aarch64), use the provided `build-dist.sh` script:
-
-```bash
-./build-dist.sh
-```
-
-Binaries are written to the `target/dist/` directory:
-
-| File | Platform |
-|---|---|
-| `sonar-scan-x86_64-linux` | Linux x86\_64 (static musl) |
-| `sonar-scan-aarch64-linux` | Linux aarch64 (static musl) |
-| `sonar-scan-x86_64-windows.exe` | Windows x86\_64 |
-| `sonar-scan-aarch64-windows.exe` | Windows aarch64 |
-| `sonar-scan-x86_64-macos` | macOS Intel |
-| `sonar-scan-aarch64-macos` | macOS Apple Silicon |
-
-Integration tests can be run with:
-
-```bash
-./integration-tests.sh
+./sonar-scan --help
 ```
 
 ## Usage
 
-If `sonar-scan` is placed in the root of the project you want to analyze, run it from there:
-
 ```bash
-./sonar-scan
+export SONAR_TOKEN="sqa_012345678901234567890123456789"
+export SONAR_HOST_URL="http://localhost:9000"
+sonar-scan
 ```
 
-If `sonar-scan` is located elsewhere, pass the project directory as an argument:
+OR
 
 ```bash
-./sonar-scan --dir /path/to/project
+sonar-scan --token "sqa_012345678901234567890123456789" --url "http://localhost:9000"
 ```
 
 ## License

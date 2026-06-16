@@ -89,9 +89,9 @@ struct JreMetadata {
 const SONAR_SCANNER_CLI_JAR: &[u8] =
     include_bytes!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar");
 pub const SONAR_SCANNER_CLI_JAR_VERSION: &str =
-    include_str!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar.version.txt");
+    include_str!("../resources/sonar-scanner-cli/version.txt");
 const SONAR_SCANNER_CLI_JAR_SHA256: &str =
-    include_str!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar.sha256.txt");
+    include_str!("../resources/sonar-scanner-cli/sha256.txt");
 
 pub fn download_jre_extract_scanner(
     options: &ScannerOptions,

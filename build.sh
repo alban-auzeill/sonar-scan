@@ -8,6 +8,10 @@ main() {
     exit 1
   fi
 
+  if [[ ! -e "resources/sonar-scanner-cli/sonar-scanner-cli.jar" ]]; then
+    ./download-sonar-scanner.sh
+  fi
+
   # Test and Build
   cargo test
   cargo build --release

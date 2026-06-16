@@ -15,6 +15,9 @@ check_prerequisites() {
     echo -e "${RED}Error: Rust toolchain not found. Install it from https://rustup.rs${RESET}"
     exit 1
   fi
+  if [[ ! -e "resources/sonar-scanner-cli/sonar-scanner-cli.jar" ]]; then
+    ./download-sonar-scanner.sh
+  fi
 }
 
 # Build one target and copy the binary to dist/ with the given output name.

@@ -14,15 +14,9 @@ function download_scanner() {
   fi
 
   if [[ -z "${SCANNER_VERSION}" ]]; then
-    SCANNER_VERSION="$(curl -sSLf -o - -u "${ARTIFACTORY_USER}:${ARTIFACTORY_PASSWORD}" "${METADATA_URL}"  |  grep -oP '(?<=<release>)[^<]+')"
-    if [[ -z "${SCANNER_VERSION}" ]]; then
-      echo "Failed to determine sonar-scanner-cli's latest release from ${METADATA_URL}"
-      return 1
-    fi
-    echo "Downloading sonar-scanner-cli version: ${SCANNER_VERSION} (latest release)"
-  else
-    echo "Downloading sonar-scanner-cli version: ${SCANNER_VERSION}"
+    SCANNER_VERSION="$(cat "${SCRIPT_DIR}/resources/sonar-scanner-cli/version.txt")"
   fi
+  echo "Downloading sonar-scanner-cli version: ${SCANNER_VERSION}"
 
   local SCANNER_DIR="${SCRIPT_DIR}/resources/sonar-scanner-cli"
   if [[ -d "${SCANNER_DIR}" ]]; then
@@ -34,8 +28,8 @@ function download_scanner() {
 
   local JAR_URL="https://repox.jfrog.io/artifactory/sonarsource-public-releases/org/sonarsource/scanner/cli/sonar-scanner-cli/${SCANNER_VERSION}/sonar-scanner-cli-${SCANNER_VERSION}.jar"
   local JAR_PATH="${SCANNER_DIR}/sonar-scanner-cli.jar"
-  local SHA_PATH="${JAR_PATH}.sha256.txt"
-  local VERSION_PATH="${JAR_PATH}.version.txt"
+  local SHA_PATH="${SCANNER_DIR}/sha256.txt"
+  local VERSION_PATH="${SCANNER_DIR}/version.txt"
 
   echo "Source      : ${JAR_URL}"
   echo "Destination : ${JAR_PATH}"
