@@ -87,3 +87,25 @@ gh release create "${NEW_TAG}" \
     "${ASSETS[@]}"
 
 echo -e "\n${GREEN}Release ${NEW_TAG} created successfully.${RESET}"
+
+
+# ── Update GitHub Pages ───────────────────────────────────────────────────────
+echo -e "\n${BOLD}Update GitHub Pages ${NEW_TAG}...${RESET}"
+if [[ -d "target/gh-pages" ]]; then
+  rm -rf "target/gh-pages"
+else
+  mkdir -p "target"
+fi
+git clone --single-branch --branch gh-pages "$(git remote get-url origin)" "target/gh-pages"
+(
+  cp scan.sh target/gh-pages/index.html
+  for f in scan.sh scan.cmd target/dist/*; do
+      cp "$f" "target/gh-pages/"
+  done
+  cd "target/gh-pages"
+  for f in *; do
+      git add "$f"
+  done
+  git commit -m "Update GitHub Pages for release ${NEW_TAG}"
+  git push -u origin gh-pages
+)
