@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 set "SCRIPT_DIR=%~dp0"
-set "SONAR_SCAN_VERSION=1.1.0"
+set "SONAR_SCAN_VERSION=1.0.0"
 
 :: Detect architecture (PROCESSOR_ARCHITEW6432 is set when 32-bit cmd runs on a 64-bit OS)
 set "ARCH="

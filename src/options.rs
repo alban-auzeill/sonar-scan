@@ -7,10 +7,7 @@ use std::path::PathBuf;
 pub const DEFAULT_URL: &str = "https://sonarcloud.io";
 pub const DEFAULT_WORK_DIR: &str = ".scannerwork";
 
-pub const HELP: &str = concat!(
-    "sonar-scan ",
-    env!("CARGO_PKG_VERSION"),
-    "
+pub const HELP: &str = r##"
 Run SonarQube analysis on a project without modifying your build configuration.
 
 USAGE:
@@ -186,8 +183,7 @@ OPTIONS:
                    Default value: <the version provided by the connected SonarQube instance>
 
     --dump                        Print all resolved options as JSON and exit.
-"
-);
+"##;
 
 #[derive(Debug, PartialEq, Serialize, Default)]
 pub enum LogLevel {

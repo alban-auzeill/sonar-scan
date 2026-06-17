@@ -92,10 +92,11 @@ fn scan(
     let args: Vec<String> = args.skip(1).collect();
 
     if args.len() == 1 && args[0] == "--version" {
-        writeln!(out, "{}", env!("CARGO_PKG_VERSION")).ok();
+        writeln!(out, "{} (sonar-scanner-cli-{})", env!("CARGO_PKG_VERSION"), SONAR_SCANNER_CLI_JAR_VERSION).ok();
         return 0;
     }
     if args.len() == 1 && args[0] == "--help" {
+        writeln!(out, "sonar-scan {} (sonar-scanner-cli-{})", env!("CARGO_PKG_VERSION"), SONAR_SCANNER_CLI_JAR_VERSION).ok();
         writeln!(out, "{HELP}").ok();
         return 0;
     }
@@ -167,7 +168,7 @@ mod tests {
     fn version_flag_prints_version_and_exits_0() {
         let (code, out, err) = run(&["sonar-scan", "--version"]);
         assert_eq!(code, 0);
-        assert_eq!(out.trim_end(), env!("CARGO_PKG_VERSION"));
+        assert_eq!(out.trim_end(), format!("{} (sonar-scanner-cli-{})", env!("CARGO_PKG_VERSION"), SONAR_SCANNER_CLI_JAR_VERSION));
         assert_eq!(err.trim_end(), "");
     }
 

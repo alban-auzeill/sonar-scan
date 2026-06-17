@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
-SONAR_SCAN_VERSION="1.1.0"
+SONAR_SCAN_VERSION="1.0.0"
 
 fn_scan() {
 
