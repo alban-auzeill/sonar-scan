@@ -51,7 +51,18 @@ fn_scan() {
       chmod +x "${_binary}"
     fi
   fi
-  exec "${_binary}" "$@"
+
+  if [ "${1:-}" = "--install" ] && [ ! -d "${2:-}" ]; then
+    echo "Error: --install need an existing directory as argument: ${2:-}" >&2
+    return 1
+  elif [ "${1:-}" = "--install" ]; then
+    _installed_binary="$(cd -- "${2:-}" && pwd)/sonar-scan"
+    cp "${_binary}" "${_installed_binary}"
+    echo "Installed successfully in ${_installed_binary}"
+    return 0
+  else
+    exec "${_binary}" "$@"
+  fi
 }
 
 fn_scan "$@"
