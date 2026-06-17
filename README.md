@@ -12,25 +12,76 @@ Benefit:
 * Display complete usage syntax and options with `--help`.
 * The only require parameters are the security token (--token) and the server URL if it is different from https://sonarcloud.io
 
+## Execution without installation
 
-## Help
+### Analyze the current directory
+
+#### URL for Linux/macOS
+
+Source | URL
+--- | ---
+Latest Release (GitHub Pages) | https://alban-auzeill.github.io/sonar-scan
+Latest Release (GitHub Releases) | https://github.com/alban-auzeill/sonar-scan/releases/latest/download/scan.sh
+A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.0.0/scan.sh
+
+#### URL for Windows
+
+Source | URL
+--- | ---
+Latest Release (GitHub Pages) | https://alban-auzeill.github.io/sonar-scan/scan.cmd
+Latest Release (GitHub Releases) | https://github.com/alban-auzeill/sonar-scan/releases/latest/download/scan.cmd
+A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.0.0/scan.cmd
+
+#### Download tools
+
+curl or wget
+
+* curl -sSfL "<url>"
+* wget -qO- "<url>"
+
+#### Execution
+
+sh or bash
+
+* curl -sSfL "<url>" | sh
+* curl -sSfL "<url>" | sh -s -- ... arguments ...
+* curl -sSfL "<url>" | bash
+* curl -sSfL "<url>" | bash -s -- ... arguments ...
+
+#### Example using environment variables, curl and sh
+
+### Example to display help
 
 ```bash
-./sonar-scan --help
+curl -sSfL "https://alban-auzeill.github.io/sonar-scan" | bash -s -- --help
 ```
 
-## Usage
-
 ```bash
-export SONAR_TOKEN="sqa_012345678901234567890123456789"
+export SONAR_TOKEN="sqa_0123456789001234567890"
 export SONAR_HOST_URL="http://localhost:9000"
-sonar-scan
+curl -sSfL "https://alban-auzeill.github.io/sonar-scan" | sh
 ```
 
-OR
+### Example using command line arguments and bash
 
 ```bash
-sonar-scan --token "sqa_012345678901234567890123456789" --url "http://localhost:9000"
+curl -sSfL "https://alban-auzeill.github.io/sonar-scan" | bash -s -- --token "sqa_0123456789001234567890" --url "http://localhost:9000"
+```
+
+### Example to display help
+
+```bash
+curl -sSfL "https://alban-auzeill.github.io/sonar-scan" | bash -s -- --help
+```
+
+### Installing sonar-scan in a directory
+
+It's better to use a directory in the PATH.
+
+```bash
+curl -sSfL "https://alban-auzeill.github.io/sonar-scan" | bash -s -- --install "$HOME/bin"
+
+sonar-scan --version
 ```
 
 ## License
