@@ -22,7 +22,7 @@ Source | URL
 --- | ---
 Latest Release (GitHub Pages) | https://alban-auzeill.github.io/sonar-scan
 Latest Release (GitHub Releases) | https://github.com/alban-auzeill/sonar-scan/releases/latest/download/scan.sh
-A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.0.0/scan.sh
+A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.1.0/scan.sh
 
 #### URL for Windows
 
@@ -30,7 +30,7 @@ Source | URL
 --- | ---
 Latest Release (GitHub Pages) | https://alban-auzeill.github.io/sonar-scan/scan.cmd
 Latest Release (GitHub Releases) | https://github.com/alban-auzeill/sonar-scan/releases/latest/download/scan.cmd
-A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.0.0/scan.cmd
+A specific version | https://github.com/alban-auzeill/sonar-scan/releases/download/v1.1.0/scan.cmd
 
 #### Download tools
 
