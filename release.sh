@@ -65,7 +65,7 @@ echo -e "\n${BOLD}Running integration-tests.sh...${RESET}"
 
 # ── Collect assets ────────────────────────────────────────────────────────────
 ASSETS=()
-for f in scan.sh scan.cmd target/dist/*; do
+for f in scan.sh scan.cmd scan.ps1 target/dist/*; do
     [ -f "$f" ] && ASSETS+=("$f")
 done
 
@@ -99,7 +99,7 @@ fi
 git clone --single-branch --branch gh-pages "$(git remote get-url origin)" "target/gh-pages"
 (
   cp scan.sh target/gh-pages/index.html
-  for f in scan.sh scan.cmd target/dist/*; do
+  for f in scan.sh scan.cmd scan.cmd target/dist/*; do
       cp "$f" "target/gh-pages/"
   done
   cd "target/gh-pages"
