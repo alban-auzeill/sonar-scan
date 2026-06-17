@@ -87,11 +87,7 @@ scan.cmd --token "sqa_0123456789001234567890" --url "http://localhost:9000"
 #### Windows — execute via PowerShell
 
 ```powershell
-curl -sSfL "https://alban-auzeill.github.io/sonar-scan/scan.cmd" -o scan.cmd
-
-$env:SONAR_TOKEN = "sqa_0123456789001234567890"
-$env:SONAR_HOST_URL = "http://localhost:9000"
-.\scan.cmd
+& ([scriptblock]::Create((Invoke-RestMethod 'https://alban-auzeill.github.io/sonar-scan/scan.ps1'))) --help
 ```
 
 ### Installing sonar-scan in a directory
