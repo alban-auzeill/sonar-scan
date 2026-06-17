@@ -2,6 +2,7 @@
 set -eu
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+SONAR_SCAN_VERSION="1.1.0"
 
 fn_scan() {
 
@@ -20,14 +21,36 @@ fn_scan() {
 
   # customize environment variables here
 
-  _binary="$SCRIPT_DIR/target/dist/sonar-scan-${_arch}-${_os_suffix}"
-
-  if [ ! -f "${_binary}" ]; then
-      printf 'Binary not found: %s\n' "${_binary}" >&2
-      printf 'Run ./build-dist.sh to build the binaries.\n' >&2
-      exit 1
+  _binary="${SCRIPT_DIR}/target/dist/sonar-scan-${_arch}-${_os_suffix}"
+  if [ ! -e "${_binary}" ]; then
+      _binary="${HOME}/.sonar/cache/sonar-scan-${SONAR_SCAN_VERSION}/sonar-scan-${_arch}-${_os_suffix}"
+    if [ ! -e "${_binary}" ]; then
+      mkdir -p "${HOME}/.sonar/cache/sonar-scan-${SONAR_SCAN_VERSION}"
+      _url="https://github.com/alban-auzeill/sonar-scan/releases/download/v${SONAR_SCAN_VERSION}/sonar-scan-${_arch}-${_os_suffix}"
+      if command -v curl >/dev/null 2>&1; then
+          if ! curl -sSLf -o "${_binary}" "${_url}"; then
+              echo "Error: curl failed to download ${_url} into ${_binary}" >&2
+              rm -f "${_binary}"
+              return 1
+          fi
+      elif command -v wget >/dev/null 2>&1; then
+          if ! wget -q -O "${_binary}" --max-redirect=20 "${_url}"; then
+              echo "Error: wget failed to download ${_url} into ${_binary}" >&2
+              rm -f "${_binary}"
+              return 1
+          fi
+      else
+          echo "Error: Neither curl nor wget found." >&2
+          return 1
+      fi
+      if [ ! -s "${_binary}" ]; then
+          echo "Error: ${_binary} not found or empty" >&2
+          rm -f "${_binary}"
+          return 1
+      fi
+      chmod +x "${_binary}"
+    fi
   fi
-
   exec "${_binary}" "$@"
 }
 

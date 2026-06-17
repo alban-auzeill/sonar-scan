@@ -18,6 +18,15 @@ check_prerequisites() {
   if [[ ! -e "resources/sonar-scanner-cli/sonar-scanner-cli.jar" ]]; then
     ./download-sonar-scanner.sh
   fi
+  # Validate that Cargo.toml version matches the SONAR_SCAN_VERSION= in scan.sh
+  local cargo_version
+  cargo_version=$(awk -F'"' '/^version[[:space:]]*=[[:space:]]*"/ {print $2; exit}' Cargo.toml)
+  local scan_version
+  scan_version=$(awk -F'=' '/^SONAR_SCAN_VERSION[[:space:]]*=/ {gsub(/[[:space:]]*/, "", $2); gsub(/"/, "", $2); print $2; exit}' scan.sh)
+  if [[ "$cargo_version" != "$scan_version" ]]; then
+    echo -e "${RED}Error: Cargo.toml version ($cargo_version) does not match scan.sh SONAR_SCAN_VERSION ($scan_version)${RESET}"
+    exit 1
+  fi
 }
 
 # Build one target and copy the binary to dist/ with the given output name.
