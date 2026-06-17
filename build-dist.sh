@@ -20,11 +20,17 @@ check_prerequisites() {
   fi
   # Validate that Cargo.toml version matches the SONAR_SCAN_VERSION= in scan.sh
   local cargo_version
-  cargo_version=$(awk -F'"' '/^version[[:space:]]*=[[:space:]]*"/ {print $2; exit}' Cargo.toml)
-  local scan_version
-  scan_version=$(awk -F'=' '/^SONAR_SCAN_VERSION[[:space:]]*=/ {gsub(/[[:space:]]*/, "", $2); gsub(/"/, "", $2); print $2; exit}' scan.sh)
-  if [[ "$cargo_version" != "$scan_version" ]]; then
-    echo -e "${RED}Error: Cargo.toml version ($cargo_version) does not match scan.sh SONAR_SCAN_VERSION ($scan_version)${RESET}"
+  cargo_version="$(sed -nE 's/^version *= *"([^"]*)"$/\1/p' Cargo.toml)"
+  local scan_sh_version
+  scan_sh_version="$(sed -nE 's/^SONAR_SCAN_VERSION="([^"]*)"$/\1/p' scan.sh)"
+  if [[ "$cargo_version" != "$scan_sh_version" ]]; then
+    echo -e "${RED}Error: Cargo.toml version ($cargo_version) does not match scan.sh SONAR_SCAN_VERSION ($scan_sh_version)${RESET}"
+    exit 1
+  fi
+  local scan_cmd_version
+  scan_cmd_version="$(sed -nE 's/^set "SONAR_SCAN_VERSION=([^"]*)"$/\1/p' scan.cmd)"
+  if [[ "$cargo_version" != "$scan_cmd_version" ]]; then
+    echo -e "${RED}Error: Cargo.toml version ($cargo_version) does not match scan.cmd SONAR_SCAN_VERSION ($scan_cmd_version)${RESET}"
     exit 1
   fi
 }
