@@ -103,7 +103,10 @@ pub fn download_jre_extract_scanner(
 }
 
 fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBuf, String> {
-    let base_url = options.url.trim_end_matches('/');
+    let base_url = options.scanner_properties
+        .get("sonar.scanner.apiBaseUrl")
+        .map(|s| s.as_str())
+        .unwrap_or_else(|| options.url.trim_end_matches('/'));
     let bearer = format!("Bearer {}", options.token.as_deref().unwrap_or_default());
 
     let list_url = format!(
