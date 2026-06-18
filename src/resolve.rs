@@ -147,7 +147,8 @@ fn resolve_host_url(mut options: ScannerOptions) -> ScannerOptions {
             .cloned()
             .unwrap_or_default();
         let api_base_url = if is_sonar_cloud {
-            host
+            let re = Regex::new(r"://(?:[^./]+\.)?([^./]+\.[^./]+(?:/.*|$))").unwrap();
+            re.replace(&host, "://api.$1").to_string()
         } else {
             format!("{host}/api/v2")
         };

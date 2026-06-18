@@ -85,11 +85,13 @@ pub struct ScannerPaths {
 
 #[derive(serde::Deserialize)]
 struct JreMetadata {
-    id: String,
+    id: Option<String>,
     filename: String,
     sha256: String,
     #[serde(rename = "javaPath")]
     java_path: String,
+    #[serde(rename = "downloadUrl")]
+    download_url: Option<String>,
 }
 
 pub fn download_jre_extract_scanner(
@@ -110,16 +112,16 @@ fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBu
     let bearer = format!("Bearer {}", options.token.as_deref().unwrap_or_default());
 
     let list_url = format!(
-        "{base_url}/api/v2/analysis/jres?os={}&arch={}",
+        "{base_url}/analysis/jres?os={}&arch={}",
         options.os, options.arch
     );
     let response = ureq::get(&list_url)
         .header("Authorization", &bearer)
         .call()
-        .map_err(|e| format!("Failed to fetch JRE metadata from {list_url}: {e}"))?;
+        .map_err(|e| format!("Failed to fetch JRE metadata from '{list_url}': {e}"))?;
     let jre_list: Vec<JreMetadata> =
         serde_json::from_reader(response.into_body().into_reader())
-            .map_err(|e| format!("Failed to parse JRE metadata: {e}"))?;
+            .map_err(|e| format!("Failed to parse JRE metadata '{list_url}': {e}"))?;
     let jre = jre_list
         .into_iter()
         .next()
@@ -134,7 +136,12 @@ fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBu
     std::fs::create_dir_all(&jre_dir).map_err(|e| e.to_string())?;
 
     let archive_path = jre_dir.join(&jre.filename);
-    let download_url = format!("{base_url}/api/v2/analysis/jres/{}", jre.id);
+    let download_url = if let Some(url) = &jre.download_url {
+        url.clone()
+    } else {
+        format!("{base_url}/analysis/jres/{}", &jre.id
+            .ok_or_else(|| format!("Unsupported metadata without 'id' or 'downloadUrl' at '{list_url}'"))?).to_string()
+    };
 
     log(out, &format!("INFO  Downloading {download_url}"));
     let response = ureq::get(&download_url)
