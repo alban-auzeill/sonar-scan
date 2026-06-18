@@ -1,6 +1,5 @@
-use std::env;
 use regex::Regex;
-use crate::options::{default_os, ScannerOptions};
+use crate::options::ScannerOptions;
 
 pub fn infer_missing_options(mut options: ScannerOptions) -> ScannerOptions {
     options = resolve_host_url(options);
@@ -45,7 +44,115 @@ fn is_sonarqube_cloud_us(url: &str) -> bool {
         .unwrap().is_match(url)
 }
 
+fn clean_url(url: &str) -> String {
+    let s = url.trim();
+    let s = if s.starts_with("http://") || s.starts_with("https://") {
+        s.to_string()
+    } else {
+        format!("https://{s}")
+    };
+    s.trim_end_matches('/').to_string()
+}
+
 fn resolve_host_url(mut options: ScannerOptions) -> ScannerOptions {
+    // Step 1: Clean known URL properties
+    for key in ["sonar.host.url", "sonar.scanner.sonarcloudUrl", "sonar.scanner.apiBaseUrl"] {
+        if let Some(url) = options.scanner_properties.get(key).cloned() {
+            options.scanner_properties.insert(key.to_string(), clean_url(&url));
+        }
+    }
+
+    // Step 2: Validate sonar.region (only 'us' or empty/absent are supported)
+    let region_is_set = options.scanner_properties.contains_key("sonar.region");
+    let region = options.scanner_properties
+        .get("sonar.region")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    if !region.is_empty() && region != "us" {
+        eprintln!(
+            "ERROR  Unsupported region '{}'. List of supported regions: ['us']. \
+             Please check the 'sonar.region' property or the 'SONAR_REGION' environment variable.",
+            region
+        );
+        std::process::exit(1);
+    }
+
+    // Step 3: Determine host URL and whether this is SonarQube Cloud
+    let host_url = options.scanner_properties.get("sonar.host.url").cloned();
+    let sonarcloud_url = options.scanner_properties.get("sonar.scanner.sonarcloudUrl").cloned();
+
+    let is_sonar_cloud = match (&host_url, &sonarcloud_url) {
+        (Some(host), Some(cloud)) => {
+            // Both URLs are set — they must agree
+            if host != cloud {
+                eprintln!(
+                    "ERROR  The arguments 'sonar.host.url' and 'sonar.scanner.sonarcloudUrl' are \
+                     both set and are different. Please set either 'sonar.host.url' for SonarQube \
+                     or 'sonar.scanner.sonarcloudUrl' for SonarCloud."
+                );
+                std::process::exit(1);
+            }
+            true
+        }
+        (None, Some(cloud)) => {
+            // Only sonarcloudUrl is set — mirror it into host.url
+            options.scanner_properties.insert("sonar.host.url".to_string(), cloud.clone());
+            true
+        }
+        (None, None) => {
+            // No URL set — pick default based on region
+            let (host, cloud_url) = if region == "us" {
+                ("https://sonarqube.us", "https://sonarqube.us")
+            } else {
+                ("https://sonarcloud.io", "https://sonarcloud.io")
+            };
+            options.scanner_properties.insert("sonar.host.url".to_string(), host.to_string());
+            options.scanner_properties.insert("sonar.scanner.sonarcloudUrl".to_string(), cloud_url.to_string());
+            true
+        }
+        (Some(host), None) => {
+            // host.url is set — classify by URL pattern or explicit region
+            if is_sonarqube_cloud_us(host) {
+                if !region_is_set {
+                    options.scanner_properties.insert("sonar.region".to_string(), "us".to_string());
+                }
+                true
+            } else if is_sonarqube_cloud_eu(host) {
+                if !region_is_set {
+                    options.scanner_properties.insert("sonar.region".to_string(), String::new());
+                }
+                true
+            } else if region_is_set && (region == "us" || region.is_empty()) {
+                // Custom SonarCloud URL (staging/dev) indicated by explicit region
+                if !options.scanner_properties.contains_key("sonar.scanner.sonarcloudUrl") {
+                    options.scanner_properties.insert("sonar.scanner.sonarcloudUrl".to_string(), host.clone());
+                }
+                true
+            } else {
+                // SonarQube Server
+                false
+            }
+        }
+    };
+
+    options.scanner_properties.insert(
+        "sonar.scanner.internal.isSonarCloud".to_string(),
+        is_sonar_cloud.to_string(),
+    );
+
+    // Step 4: Set apiBaseUrl if not already present
+    if !options.scanner_properties.contains_key("sonar.scanner.apiBaseUrl") {
+        let host = options.scanner_properties
+            .get("sonar.host.url")
+            .cloned()
+            .unwrap_or_default();
+        let api_base_url = if is_sonar_cloud {
+            host
+        } else {
+            format!("{host}/api/v2")
+        };
+        options.scanner_properties.insert("sonar.scanner.apiBaseUrl".to_string(), api_base_url);
+    }
 
     options
 }
@@ -110,8 +217,6 @@ fn resolve_key_from_git_repository_name(mut options: ScannerOptions) -> ScannerO
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indoc::indoc;
-
     #[test]
     fn resolve_sonarqube_or_sonarcloud() {
 
