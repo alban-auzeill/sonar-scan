@@ -3,7 +3,13 @@ use std::path::PathBuf;
 use crate::log;
 use crate::options::ScannerOptions;
 
-const SCANNER_VERSION: &str = "8.0.1.6346";
+const SONAR_SCANNER_CLI_JAR: &[u8] =
+    include_bytes!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar");
+pub const SONAR_SCANNER_CLI_JAR_VERSION: &str =
+    include_str!("../resources/sonar-scanner-cli/version.txt");
+const SONAR_SCANNER_CLI_JAR_SHA256: &str =
+    include_str!("../resources/sonar-scanner-cli/sha256.txt");
+
 const SCANNER_URL: &str = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{version}-{os}-{arch}.zip";
 const SCANNER_DIR: &str = "sonar-scanner-{version}-{os}-{arch}";
 
@@ -24,7 +30,7 @@ const SCANNER_DIR: &str = "sonar-scanner-{version}-{os}-{arch}";
 ///
 pub fn download_scanner(options: &ScannerOptions,  out: &mut impl Write) -> Result<PathBuf, String> {
 
-    let effective_version : &str = options.scanner_version.as_deref().unwrap_or(SCANNER_VERSION);
+    let effective_version : &str = options.scanner_version.as_deref().unwrap_or(SONAR_SCANNER_CLI_JAR_VERSION);
     let scanner_os = match options.os.as_str() {
         "mac" | "macos" | "darwin" => "macosx",
         "alpine" => "linux",
@@ -85,13 +91,6 @@ struct JreMetadata {
     #[serde(rename = "javaPath")]
     java_path: String,
 }
-
-const SONAR_SCANNER_CLI_JAR: &[u8] =
-    include_bytes!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar");
-pub const SONAR_SCANNER_CLI_JAR_VERSION: &str =
-    include_str!("../resources/sonar-scanner-cli/version.txt");
-const SONAR_SCANNER_CLI_JAR_SHA256: &str =
-    include_str!("../resources/sonar-scanner-cli/sha256.txt");
 
 pub fn download_jre_extract_scanner(
     options: &ScannerOptions,
@@ -265,11 +264,11 @@ mod integration_tests {
 
         let scanner_executable = download_scanner(&options, &mut out).unwrap();
 
-        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache.join("sonar-scanner-8.0.1.6346-macosx-aarch64/bin/sonar-scanner").to_string_lossy());
+        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache.join("sonar-scanner-8.1.0.6389-macosx-aarch64/bin/sonar-scanner").to_string_lossy());
 
-        let expected_scanner_dir = canonical_tmp_dir.join("cache").join("sonar-scanner-8.0.1.6346-macosx-aarch64");
+        let expected_scanner_dir = canonical_tmp_dir.join("cache").join("sonar-scanner-8.1.0.6389-macosx-aarch64");
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {r#"
-        12:00:00.000 INFO  Downloading https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-8.0.1.6346-macosx-aarch64.zip
+        12:00:00.000 INFO  Downloading https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-8.1.0.6389-macosx-aarch64.zip
         12:00:00.000 INFO  Extracting to {scanner_dir}
         "#}.replace("{scanner_dir}", &expected_scanner_dir.to_str().unwrap()));
 

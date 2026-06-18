@@ -38,6 +38,19 @@ OPTIONS:
                    Env. variable: SONAR_HOST_URL
                    Property name: sonar.host.url
 
+    --org=<URL>                   (Only for SonarQube Cloud) The project organization.
+                   Default value: <Organization of the given token if there is only one>
+                   Env. variable: SONAR_ORGANIZATION
+                   Property name: sonar.organization
+
+    --region=<URL>                (Only for SonarQube Cloud) The SonarQube Cloud region:
+                                  Possible values: 'us', missing or emtpy.
+                                  * 'us' region set 'sonar.host.url' to 'https://sonarqube.us'
+                                  * missing or emtpy set 'sonar.host.url' to 'https://sonarcloud.io'
+                   Default value: <emtpy>
+                   Env. variable: SONAR_REGION
+                   Property name: sonar.region
+
     --key=<KEY>                   The project's unique key. Can include up to 400 characters. All
                                   letters, digits, dashes, underscores, periods, and colons are
                                   accepted.
@@ -351,6 +364,8 @@ pub fn parse_options(
     let url_from_env = env_fn("SONAR_HOST_URL");
     let mut url_explicit = url_from_env.is_some();
     let mut url = url_from_env.unwrap_or_else(|| DEFAULT_URL.to_string());
+    let mut organization: Option<String> = env_fn("SONAR_ORGANIZATION");
+    let mut region: Option<String> = env_fn("SONAR_REGION");
 
     let mut dir_str: Option<String> = env_fn("SONAR_BASE_DIR");
     let mut dir_explicit = dir_str.is_some();
@@ -433,6 +448,10 @@ pub fn parse_options(
         } else if let Some(v) = arg_value(arg, "--url", args, &mut i) {
             url = v;
             url_explicit = true;
+        } else if let Some(v) = arg_value(arg, "--org", args, &mut i) {
+            organization = Some(v);
+        } else if let Some(v) = arg_value(arg, "--region", args, &mut i) {
+            region = Some(v);
         } else if let Some(v) = arg_value(arg, "--token", args, &mut i) {
             token = Some(v);
         } else if let Some(v) = arg_value(arg, "--key", args, &mut i) {
@@ -516,6 +535,8 @@ pub fn parse_options(
                     "sonar.token" => token = Some(val),
                     "sonar.projectBaseDir" => { dir_str = Some(val); dir_explicit = true; }
                     "sonar.host.url" => { url = val; url_explicit = true; }
+                    "sonar.organization" => { organization = Some(val); }
+                    "sonar.region" => { region = Some(val); }
                     "sonar.projectKey" => key = Some(val),
                     "sonar.projectName" => name = Some(val),
                     "sonar.projectVersion" => version = Some(val),
@@ -584,6 +605,12 @@ pub fn parse_options(
     }
     if url_explicit {
         scanner_properties.insert("sonar.host.url".to_string(), url.clone());
+    }
+    if let Some(ref v) = organization {
+        scanner_properties.insert("sonar.organization".to_string(), v.clone());
+    }
+    if let Some(ref v) = region {
+        scanner_properties.insert("sonar.region".to_string(), v.clone());
     }
     if let Some(ref v) = token {
         scanner_properties.insert("sonar.token".to_string(), v.clone());
