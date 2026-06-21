@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 use crate::log;
-use crate::options::ScannerOptions;
+use crate::options::{ScannerOptions, SONAR_SCANNER_API_BASE_URL, SONAR_SCANNER_ARCH, SONAR_SCANNER_INTERNAL_CLI_VERSION, SONAR_SCANNER_JAVA_EXE_PATH, SONAR_SCANNER_OS, SONAR_TOKEN};
 
 const SONAR_SCANNER_CLI_JAR: &[u8] =
     include_bytes!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar");
@@ -28,33 +28,35 @@ const SCANNER_DIR: &str = "sonar-scanner-{version}-{os}-{arch}";
 ///
 /// The path to the scanner executable.
 ///
-pub fn download_scanner(options: &ScannerOptions,  out: &mut impl Write) -> Result<PathBuf, String> {
-
-    let effective_version : &str = options.scanner_version.as_deref().unwrap_or(SONAR_SCANNER_CLI_JAR_VERSION);
-    let scanner_os = match options.os.as_str() {
+pub fn download_scanner(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBuf, String> {
+    let effective_version = options.optional(SONAR_SCANNER_INTERNAL_CLI_VERSION)
+        .map(|s| s.as_str())
+        .unwrap_or(SONAR_SCANNER_CLI_JAR_VERSION);
+    let scanner_os = match options.required(SONAR_SCANNER_OS)?.as_str() {
         "mac" | "macos" | "darwin" => "macosx",
         "alpine" => "linux",
         "win" | "win32" => "windows",
         other => other,
     };
+    let scanner_arch = options.required(SONAR_SCANNER_ARCH)?.as_str();
 
     let url = SCANNER_URL
         .replace("{version}", effective_version)
         .replace("{os}", scanner_os)
-        .replace("{arch}", &options.arch);
+        .replace("{arch}", scanner_arch);
 
     let scanner_dir_name = SCANNER_DIR
         .replace("{version}", effective_version)
         .replace("{os}", scanner_os)
-        .replace("{arch}", &options.arch);
+        .replace("{arch}", scanner_arch);
 
-    let scanner_dir = options.sonar_cache.join(&scanner_dir_name);
+    let scanner_dir = options.sonar_cache()?.join(&scanner_dir_name);
     let sonar_scanner_bin = if scanner_os == "windows" { "sonar-scanner.bat" } else { "sonar-scanner" };
     let sonar_scanner = scanner_dir.join("bin").join(sonar_scanner_bin);
 
     if !sonar_scanner.is_file() {
-        let zip_path = options.sonar_cache.join(format!("{scanner_dir_name}.zip"));
-        std::fs::create_dir_all(&options.sonar_cache).map_err(|e| e.to_string())?;
+        let zip_path = options.sonar_cache()?.join(format!("{scanner_dir_name}.zip"));
+        std::fs::create_dir_all(&options.sonar_cache()?).map_err(|e| e.to_string())?;
 
         log(out, &format!("INFO  Downloading {url}"));
         let response = ureq::get(&url).call().map_err(|e| e.to_string())?;
@@ -65,7 +67,7 @@ pub fn download_scanner(options: &ScannerOptions,  out: &mut impl Write) -> Resu
         log(out, &format!("INFO  Extracting to {}", scanner_dir.display()));
         let zip_file = std::fs::File::open(&zip_path).map_err(|e| e.to_string())?;
         let mut archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
-        archive.extract(&options.sonar_cache).map_err(|e| e.to_string())?;
+        archive.extract(&options.sonar_cache()?).map_err(|e| e.to_string())?;
     }
 
     if !sonar_scanner.is_file() {
@@ -98,23 +100,23 @@ pub fn download_jre_extract_scanner(
     options: &ScannerOptions,
     out: &mut impl Write,
 ) -> Result<ScannerPaths, String> {
-    let java_exe = download_jre(options, out)?;
+    let java_exe = if let Some(path) = options.optional(SONAR_SCANNER_JAVA_EXE_PATH) {
+        PathBuf::from(&path)
+    } else {
+        download_jre(options, out)?
+    };
     let java_home = resolve_java_home(&java_exe)?;
     let sonar_scanner_jar = extract_sonar_scanner_jar(options)?;
     Ok(ScannerPaths { java_home, java_exe, sonar_scanner_jar })
 }
 
 fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBuf, String> {
-    let base_url = options.scanner_properties
-        .get("sonar.scanner.apiBaseUrl")
-        .map(|s| s.as_str())
-        .unwrap_or_else(|| options.url.trim_end_matches('/'));
-    let bearer = format!("Bearer {}", options.token.as_deref().unwrap_or_default());
+    let base_url = options.required(SONAR_SCANNER_API_BASE_URL)?;
+    let bearer = format!("Bearer {}", options.required(SONAR_TOKEN)?);
 
-    let list_url = format!(
-        "{base_url}/analysis/jres?os={}&arch={}",
-        options.os, options.arch
-    );
+    let os = options.required(SONAR_SCANNER_OS)?.as_str();
+    let arch = options.required(SONAR_SCANNER_ARCH)?.as_str();
+    let list_url = format!("{base_url}/analysis/jres?os={os}&arch={arch}");
     let response = ureq::get(&list_url)
         .header("Authorization", &bearer)
         .call()
@@ -125,14 +127,14 @@ fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBu
     let jre = jre_list
         .into_iter()
         .next()
-        .ok_or_else(|| format!("No JRE available for os={} arch={}", options.os, options.arch))?;
+        .ok_or_else(|| format!("No JRE available for os={os} arch={arch}"))?;
 
-    let java_exe = options.sonar_cache.join(&jre.sha256).join(&jre.java_path);
+    let java_exe = options.sonar_cache()?.join(&jre.sha256).join(&jre.java_path);
     if java_exe.is_file() {
         return Ok(java_exe);
     }
 
-    let jre_dir = options.sonar_cache.join(&jre.sha256);
+    let jre_dir = options.sonar_cache()?.join(&jre.sha256);
     std::fs::create_dir_all(&jre_dir).map_err(|e| e.to_string())?;
 
     let archive_path = jre_dir.join(&jre.filename);
@@ -195,21 +197,20 @@ fn extract_archive(archive_path: &std::path::Path, dest: &std::path::Path) -> Re
 }
 
 fn resolve_java_home(java_exe: &std::path::Path) -> Result<PathBuf, String> {
-    let bin_dir = java_exe
+    let dir = java_exe
         .parent()
-        .ok_or_else(|| format!("Cannot determine bin directory from: {}", java_exe.display()))?;
-    let parent = bin_dir
-        .parent()
-        .ok_or_else(|| format!("Cannot determine parent of bin: {}", bin_dir.display()))?;
-    let java_home = if parent.file_name().and_then(|n| n.to_str()) == Some("jre") {
-        parent
-            .parent()
-            .ok_or_else(|| format!("Cannot determine JAVA_HOME from: {}", java_exe.display()))?
-            .to_path_buf()
+        .ok_or_else(|| format!("Invalid parent directory for: {}", java_exe.display()))?;
+    let dir_is_bin = dir.file_name().is_some_and(|name| name == "bin");
+    if let Some(parent_dir) = dir.parent() {
+        if dir_is_bin && parent_dir.file_name().is_some_and(|name| name == "jre") {
+            Ok(parent_dir.parent().unwrap_or(parent_dir).to_owned())
+        } else {
+            Ok(parent_dir.to_owned())
+        }
+
     } else {
-        parent.to_path_buf()
-    };
-    Ok(java_home)
+        Ok(dir.to_owned())
+    }
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -221,7 +222,7 @@ fn extract_sonar_scanner_jar(options: &ScannerOptions) -> Result<PathBuf, String
     let version = SONAR_SCANNER_CLI_JAR_VERSION.trim();
     let expected = SONAR_SCANNER_CLI_JAR_SHA256.trim();
     let jar_path = options
-        .sonar_cache
+        .sonar_cache()?
         .join(expected)
         .join(format!("sonar-scanner-cli-{version}.jar"));
 
@@ -252,29 +253,30 @@ fn extract_sonar_scanner_jar(options: &ScannerOptions) -> Result<PathBuf, String
 #[cfg(test)]
 #[cfg(feature = "integration-tests")]
 mod integration_tests {
+    use std::collections::BTreeMap;
     use indoc::indoc;
     use super::*;
     use tempfile::tempdir;
 
     #[test]
-    fn download_the_scanner_in_a_temporary_directory() {
+    fn download_the_scanner_in_a_temporary_directory() -> Result<(), String> {
         let mut out = Vec::new();
 
         let tmp_dir = tempdir().unwrap();
-        let canonical_tmp_dir = tmp_dir.path().canonicalize().unwrap();
+        let canonical_tmp_dir = tmp_dir.path().canonicalize().map_err(|e| e.to_string())?;
         let options: ScannerOptions = ScannerOptions {
-            scanner_version: None,
-            os: "macos".to_string(),
-            arch: "aarch64".to_string(),
-            sonar_home: canonical_tmp_dir.clone(),
-            sonar_cache: canonical_tmp_dir.join("cache"),
-            ..Default::default()
+            sonar_properties: BTreeMap::from([
+                ("sonar.scanner.os".to_string(), "macos".to_string()),
+                ("sonar.scanner.arch".to_string(), "aarch64".to_string()),
+                ("sonar.userHome".to_string(), canonical_tmp_dir.to_string_lossy().to_string()),
+            ]),
+            other_args: Vec::new(),
         };
-        std::fs::create_dir_all(&options.sonar_cache).unwrap();
+        std::fs::create_dir_all(&options.sonar_cache()?).map_err(|e| e.to_string())?;
 
-        let scanner_executable = download_scanner(&options, &mut out).unwrap();
+        let scanner_executable = download_scanner(&options, &mut out)?;
 
-        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache.join("sonar-scanner-8.1.0.6389-macosx-aarch64/bin/sonar-scanner").to_string_lossy());
+        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache()?.join("sonar-scanner-8.1.0.6389-macosx-aarch64/bin/sonar-scanner").to_string_lossy());
 
         let expected_scanner_dir = canonical_tmp_dir.join("cache").join("sonar-scanner-8.1.0.6389-macosx-aarch64");
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {r#"
@@ -283,27 +285,29 @@ mod integration_tests {
         "#}.replace("{scanner_dir}", &expected_scanner_dir.to_str().unwrap()));
 
         tmp_dir.close().unwrap();
+        Ok(())
     }
 
     #[test]
-    fn download_an_old_the_scanner_in_a_temporary_directory() {
+    fn download_an_old_the_scanner_in_a_temporary_directory() -> Result<(), String> {
         let mut out = Vec::new();
 
         let tmp_dir = tempdir().unwrap();
         let canonical_tmp_dir = tmp_dir.path().canonicalize().unwrap();
         let options: ScannerOptions = ScannerOptions {
-            scanner_version: Some("7.3.0.5189".to_string()),
-            os: "linux".to_string(),
-            arch: "x64".to_string(),
-            sonar_home: canonical_tmp_dir.clone(),
-            sonar_cache: canonical_tmp_dir.join("cache"),
-            ..Default::default()
+            sonar_properties: BTreeMap::from([
+                ("sonar.scanner.internal.cli.version".to_string(), "7.3.0.5189".to_string()),
+                ("sonar.scanner.os".to_string(), "linux".to_string()),
+                ("sonar.scanner.arch".to_string(), "x64".to_string()),
+                ("sonar.userHome".to_string(), canonical_tmp_dir.to_string_lossy().to_string()),
+            ]),
+            other_args: Vec::new(),
         };
-        std::fs::create_dir_all(&options.sonar_cache).unwrap();
+        std::fs::create_dir_all(&options.sonar_cache()?).map_err(|e| e.to_string())?;
 
-        let scanner_executable = download_scanner(&options, &mut out).unwrap();
+        let scanner_executable = download_scanner(&options, &mut out)?;
 
-        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache.join("sonar-scanner-7.3.0.5189-linux-x64/bin/sonar-scanner").to_string_lossy());
+        assert_eq!(scanner_executable.to_string_lossy(), options.sonar_cache()?.join("sonar-scanner-7.3.0.5189-linux-x64/bin/sonar-scanner").to_string_lossy());
 
         let expected_scanner_dir = canonical_tmp_dir.join("cache").join("sonar-scanner-7.3.0.5189-linux-x64");
         assert_eq!(String::from_utf8(out).unwrap(), indoc! {r#"
@@ -312,5 +316,6 @@ mod integration_tests {
         "#}.replace("{scanner_dir}", &expected_scanner_dir.to_str().unwrap()));
 
         tmp_dir.close().unwrap();
+        Ok(())
     }
 }

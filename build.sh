@@ -13,7 +13,7 @@ main() {
   fi
 
   # Test and Build
-  cargo test
+  cargo test -- --show-output
   cargo build --release
 
   echo "Binary is located at target/release/sonar-scan"

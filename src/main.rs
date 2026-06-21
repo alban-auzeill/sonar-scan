@@ -2,8 +2,7 @@ mod options;
 mod resolve;
 mod sonar_scanner_cli;
 
-use options::{ScannerOptions, HELP, parse_options};
-use resolve::infer_missing_options;
+use options::{ScannerOptions, usage, parse_options};
 use sonar_scanner_cli::{download_jre_extract_scanner, download_scanner};
 #[cfg(not(test))]
 use chrono::{Local};
@@ -12,7 +11,7 @@ use chrono::{Local, TimeZone};
 use std::env;
 use std::io::{self, Write};
 use std::process::{self, Command, Stdio};
-use crate::options::LogLevel;
+use crate::options::{SONAR_PROJECT_BASE_DIR, SONAR_SCANNER_INTERNAL_CLI_VERSION, SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES, SONAR_TOKEN};
 use crate::sonar_scanner_cli::SONAR_SCANNER_CLI_JAR_VERSION;
 
 fn log(out: &mut impl Write, message: &str) {
@@ -25,23 +24,23 @@ fn log(out: &mut impl Write, message: &str) {
 
 fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, String> {
     log(out, &format!("INFO  sonar-scan {}", env!("CARGO_PKG_VERSION")));
-    log(out, &format!("INFO  Project: {}", options.dir.display()));
+    log(out, &format!("INFO  Project: {}", options.project_base_directory()?.display()));
 
     let d_params: Vec<String> = options
-        .scanner_properties
+        .sonar_properties
         .iter()
         .map(|(k, v)| format!("-D{k}={v}"))
         .collect();
 
-    let status = if let Some(scanner_version) = &options.scanner_version {
+    let status = if let Some(scanner_version) = options.optional(SONAR_SCANNER_INTERNAL_CLI_VERSION) {
         log(out, &format!("INFO  Using SonarScanner CLI: {}", &scanner_version));
         let sonar_scanner = download_scanner(options, out)?;
-        if options.log_level == LogLevel::DEBUG || options.log_level == LogLevel::TRACE {
+        if options.show_debug_log() {
             log(out, &format!("DEBUG  Scanner : {}", sonar_scanner.display()));
         }
         Command::new(&sonar_scanner)
             .args(&d_params)
-            .current_dir(&options.dir)
+            .current_dir(&options.project_base_directory()?)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .stdin(Stdio::inherit())
@@ -52,12 +51,12 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
     } else {
         log(out, &format!("INFO  Using embedded SonarScanner CLI: {}", SONAR_SCANNER_CLI_JAR_VERSION.trim()));
         let paths = download_jre_extract_scanner(options, out)?;
-        if options.log_level == LogLevel::DEBUG || options.log_level == LogLevel::TRACE {
+        if options.show_debug_log() {
             log(out, &format!("DEBUG  JAVA_HOME : {}", paths.java_home.display()));
             log(out, &format!("DEBUG  java      : {}", paths.java_exe.display()));
             log(out, &format!("DEBUG  jar       : {}", paths.sonar_scanner_jar.display()));
         }
-        let project_home = options.dir.to_string_lossy();
+        let project_home = options.required(SONAR_PROJECT_BASE_DIR)?;
         let mut cmd = Command::new(&paths.java_exe);
         cmd
             .arg("-Djava.awt.headless=true")
@@ -67,7 +66,7 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
             .args(&d_params)
             .arg(format!("-Dproject.home={project_home}"))
             .arg("org.sonarsource.scanner.cli.Main")
-            .current_dir(&options.dir)
+            .current_dir(&options.project_base_directory()?)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .stdin(Stdio::inherit());
@@ -97,7 +96,7 @@ fn scan(
     }
     if args.len() == 1 && args[0] == "--help" {
         writeln!(out, "sonar-scan {} (sonar-scanner-cli-{})", env!("CARGO_PKG_VERSION"), SONAR_SCANNER_CLI_JAR_VERSION).ok();
-        writeln!(out, "{HELP}").ok();
+        writeln!(out, "{}", usage()).ok();
         return 0;
     }
 
@@ -109,15 +108,13 @@ fn scan(
         }
     };
 
-    let options = infer_missing_options(options);
-
-    if options.dump {
+    if options.is_true(SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES) {
         writeln!(out, "{}", options.to_json()).ok();
         return 0;
     }
 
-    if options.token.is_none() {
-        log(err, "ERROR  Missing required option: --token or SONAR_TOKEN environment variable");
+    if options.sonar_properties.get(SONAR_TOKEN).is_none() {
+        log(err, "ERROR  Missing required option: --token or -Dsonar.token= or environment variable: SONAR_TOKEN");
         return 1;
     }
 
@@ -186,7 +183,7 @@ mod tests {
     fn without_argument_prints_current_dir_and_project_name() {
         let (code, out, err) = run(&["sonar-scan"]);
         assert_eq!(code, 1);
-        assert_eq!(err.trim_end(), "12:00:00.000 ERROR  Missing required option: --token or SONAR_TOKEN environment variable");
+        assert_eq!(err.trim_end(), "12:00:00.000 ERROR  Missing required option: --token or -Dsonar.token= or environment variable: SONAR_TOKEN");
         assert_eq!(out.trim_end(),"");
     }
 
@@ -194,16 +191,10 @@ mod tests {
     fn with_nonexistent_dir_prints_error_and_exits_1() {
         let (code, out, err) = run(&["sonar-scan", "--dir=/nonexistent/path"]);
         assert_eq!(code, 1);
-        assert_eq!(err.trim_end(), "12:00:00.000 ERROR  Project path does not exist: /nonexistent/path");
+        assert_eq!(err.trim_end(), "12:00:00.000 ERROR  Fail to canonicalize 'sonar.projectBaseDir' directory '/nonexistent/path': No such file or directory (os error 2)");
         assert_eq!(out.trim_end(), "");
     }
 
-    #[test]
-    fn unexpected_positional_argument_returns_error() {
-        let (code, _out, err) = run(&["sonar-scan", "some-path"]);
-        assert_eq!(code, 1);
-        assert!(err.contains("unexpected argument"));
-    }
 }
 
 #[cfg(test)]
@@ -224,7 +215,7 @@ mod integration_tests {
             "sonar-scan",
             "-Dsonar.scanner.internal.dumpToFile=scan.properties",
             "--token=123",
-            "--scanner-version=8.0.1.6346",
+            "--scanner-cli-version=8.0.1.6346",
             &format!("--dir={}", tmp.display())]);
         let content = std::fs::read_to_string(tmp.join("scan.properties"))
             .expect("scan.properties should have been created by the scanner");

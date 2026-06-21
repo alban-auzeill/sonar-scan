@@ -1,13 +1,461 @@
+use crate::resolve::infer_missing_options;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt;
 use std::path::PathBuf;
+use std::str::FromStr;
 
-pub const DEFAULT_URL: &str = "https://sonarcloud.io";
-pub const DEFAULT_WORK_DIR: &str = ".scannerwork";
+pub const SONAR_PROJECT_KEY: &'static str = "sonar.projectKey";
+pub const SONAR_PROJECT_NAME: &'static str = "sonar.projectName";
+pub const SONAR_PROJECT_BASE_DIR: &'static str = "sonar.projectBaseDir";
 
-pub const HELP: &str = r##"
+pub const SONAR_HOST_URL: &'static str = "sonar.host.url";
+pub const SONAR_SCANNER_SONARCLOUD_URL: &'static str = "sonar.scanner.sonarcloudUrl";
+pub const SONAR_SCANNER_API_BASE_URL: &'static str = "sonar.scanner.apiBaseUrl";
+
+pub const SONAR_TOKEN: &'static str = "sonar.token";
+
+struct OptDesc {
+    option: &'static str,
+    bool_flag: bool,
+    env: &'static str,
+    property: &'static str,
+    usage: &'static str,
+}
+
+pub const SONAR_ORGANIZATION: &'static str = "sonar.organization";
+pub const SONAR_REGION: &'static str = "sonar.region";
+pub const SONAR_PROJECT_VERSION: &'static str = "sonar.projectVersion";
+pub const SONAR_PROJECT_DESCRIPTION: &'static str = "sonar.projectDescription";
+pub const SONAR_ANALYSIS_BUILD_NUMBER: &'static str = "sonar.analysis.buildNumber";
+pub const SONAR_SOURCES: &'static str = "sonar.sources";
+pub const SONAR_TESTS: &'static str = "sonar.tests";
+pub const SONAR_JAVA_BINARIES: &'static str = "sonar.java.binaries";
+pub const SONAR_JAVA_LIBRARIES: &'static str = "sonar.java.libraries";
+pub const SONAR_JAVA_TEST_BINARIES: &'static str = "sonar.java.test.binaries";
+pub const SONAR_JAVA_TEST_LIBRARIES: &'static str = "sonar.java.test.libraries";
+pub const SONAR_SCANNER_OS: &'static str = "sonar.scanner.os";
+pub const SONAR_SCANNER_ARCH: &'static str = "sonar.scanner.arch";
+pub const SONAR_SCANNER_SKIP_JRE_PROVISIONING: &'static str = "sonar.scanner.skipJreProvisioning";
+pub const SONAR_SCANNER_JAVA_EXE_PATH: &'static str = "sonar.scanner.javaExePath";
+pub const SONAR_SCANNER_PROXY_HOST: &'static str = "sonar.scanner.proxyHost";
+pub const SONAR_SCANNER_PROXY_PORT: &'static str = "sonar.scanner.proxyPort";
+pub const SONAR_SCANNER_PROXY_USER: &'static str = "sonar.scanner.proxyUser";
+pub const SONAR_SCANNER_PROXY_PASSWORD: &'static str = "sonar.scanner.proxyPassword";
+pub const SONAR_USER_HOME: &'static str = "sonar.userHome";
+pub const SONAR_SCANNER_JAVA_OPTS: &'static str = "sonar.scanner.javaOpts";
+pub const SONAR_WORKING_DIRECTORY: &'static str = "sonar.working.directory";
+pub const SONAR_VERBOSE: &'static str = "sonar.verbose";
+pub const SONAR_LOG_LEVEL: &'static str = "sonar.log.level";
+pub const SONAR_SCANNER_TRUSTSTORE_PATH: &'static str = "sonar.scanner.truststorePath";
+pub const SONAR_SCANNER_TRUSTSTORE_PASSWORD: &'static str = "sonar.scanner.truststorePassword";
+pub const SONAR_SCANNER_KEYSTORE_PATH: &'static str = "sonar.scanner.keystorePath";
+pub const SONAR_SCANNER_KEYSTORE_PASSWORD: &'static str = "sonar.scanner.keystorePassword";
+pub const SONAR_SOURCE_ENCODING: &'static str = "sonar.sourceEncoding";
+pub const SONAR_SCANNER_INTERNAL_CLI_VERSION: &'static str = "sonar.scanner.internal.cli.version";
+pub const SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES: &'static str =
+    "sonar.scanner.internal.dump.properties";
+
+// Options not parsed but computed
+pub const SONAR_SCANNER_INTERNAL_IS_SONARCLOUD: &'static str =
+    "sonar.scanner.internal.isSonarCloud";
+
+const OPTIONS: &'static [OptDesc] = &[
+    OptDesc {
+        option: "token",
+        bool_flag: false,
+        env: "SONAR_TOKEN",
+        property: SONAR_TOKEN,
+        usage: r##"
+    --token=<TOKEN>               Token used by the scanner to authenticate to your SonarQube
+                                  instance. This property has no default value and is mandatory.
+"##,
+    },
+    OptDesc {
+        option: "dir",
+        bool_flag: false,
+        env: "SONAR_BASE_DIR",
+        property: SONAR_PROJECT_BASE_DIR,
+        usage: r##"
+    --dir=<PATH>                  The project's base directory. Use this property when you need the
+                                  analysis to take place in a directory other than the one from
+                                  which it was started.
+                   Default value: <current directory>
+"##,
+    },
+    OptDesc {
+        option: "url",
+        bool_flag: false,
+        env: "SONAR_HOST_URL",
+        property: SONAR_HOST_URL,
+        usage: r##"
+    --url=<URL>                   The URL to your SonarQube instance.
+                   Default value: https://sonarcloud.io
+"##,
+    },
+    OptDesc {
+        option: "org",
+        bool_flag: false,
+        env: "SONAR_ORGANIZATION",
+        property: SONAR_ORGANIZATION,
+        usage: r##"
+    --org=<URL>                   (Only for SonarQube Cloud) The project organization.
+                   Default value: <Organization of the given token if there is only one>
+"##,
+    },
+    OptDesc {
+        option: "region",
+        bool_flag: false,
+        env: "SONAR_REGION",
+        property: SONAR_REGION,
+        usage: r##"
+    --region=<URL>                (Only for SonarQube Cloud) The SonarQube Cloud region:
+                                  Possible values: 'us', missing or emtpy.
+                                  * 'us' region set 'sonar.host.url' to 'https://sonarqube.us'
+                                  * missing or emtpy set 'sonar.host.url' to 'https://sonarcloud.io'
+                   Default value: <emtpy>
+"##,
+    },
+    OptDesc {
+        option: "key",
+        bool_flag: false,
+        env: "SONAR_PROJECT_KEY",
+        property: SONAR_PROJECT_KEY,
+        usage: r##"
+    --key=<KEY>                   The project's unique key. Can include up to 400 characters. All
+                                  letters, digits, dashes, underscores, periods, and colons are
+                                  accepted.
+                   Default value: <git repository name or base directory name>
+"##,
+    },
+    OptDesc {
+        option: "name",
+        bool_flag: false,
+        env: "SONAR_PROJECT_NAME",
+        property: SONAR_PROJECT_NAME,
+        usage: r##"
+    --name=<NAME>                 Name of the project that will be displayed on the web interface.
+                   Default value: <value of sonar.projectKey>
+"##,
+    },
+    OptDesc {
+        option: "version",
+        bool_flag: false,
+        env: "SONAR_PROJECT_VERSION",
+        property: SONAR_PROJECT_VERSION,
+        usage: r##"
+    --version=<VERSION>           The project version. It should be set for branch analysis in case
+                                  you use the new code definition based on the previous version.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "description",
+        bool_flag: false,
+        env: "SONAR_PROJECT_DESCRIPTION",
+        property: SONAR_PROJECT_DESCRIPTION,
+        usage: r##"
+    --description=<TEXT>          The project description.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "build-number",
+        bool_flag: false,
+        env: "SONAR_PROJECT_BUILD_NUMBER",
+        property: SONAR_ANALYSIS_BUILD_NUMBER,
+        usage: r##"
+    --build-number=<NUMBER>       The project build number.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "sources",
+        bool_flag: false,
+        env: "SONAR_PROJECT_SOURCES",
+        property: SONAR_SOURCES,
+        usage: r##"
+    --sources=<PATHS>             The initial analysis scope for main source code (non-test code) in
+                                  the project. Comma-separated paths to directories are included. An
+                                  individual file in the list means that the file is included. A
+                                  directory in the list means that all analyzable files and
+                                  directories recursively below it are included. The path can be
+                                  relative (to the sonar.projectBaseDir property) or absolute.
+                                  Wildcards (*, ** and ?) are not allowed.
+                   Default value: <value of sonar.projectBaseDir>
+"##,
+    },
+    OptDesc {
+        option: "tests",
+        bool_flag: false,
+        env: "SONAR_PROJECT_TESTS",
+        property: SONAR_TESTS,
+        usage: r##"
+    --tests=<PATHS>               The initial analysis scope for test code in the project.
+                                  Same format as '--sources'.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "java-binaries",
+        bool_flag: false,
+        env: "SONAR_JAVA_BINARIES",
+        property: SONAR_JAVA_BINARIES,
+        usage: r##"
+    ----java-binaries=<PATHS>     Comma-separated paths to directories containing the compiled
+                                  bytecode files corresponding to your source files.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "java-libraries",
+        bool_flag: false,
+        env: "SONAR_JAVA_LIBRARIES",
+        property: SONAR_JAVA_LIBRARIES,
+        usage: r##"
+    ----java-libraries=<PATHS>    Comma-separated paths to files with third-party libraries (JAR or
+                                  Zip files) used by your project.
+                                  Wildcards can be used:
+                                  sonar.java.libraries=path/to/Library.jar,directory/**/*.jar
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "java-test-binaries",
+        bool_flag: false,
+        env: "SONAR_JAVA_TEST_BINARIES",
+        property: SONAR_JAVA_TEST_BINARIES,
+        usage: r##"
+    --java-test-binaries=<PATHS>  Comma-separated paths to directories containing the compiled
+                                  bytecode files corresponding to your test files.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "java-test-libraries",
+        bool_flag: false,
+        env: "SONAR_JAVA_TEST_LIBRARIES",
+        property: SONAR_JAVA_TEST_LIBRARIES,
+        usage: r##"
+    --java-test-libraries=<PATHS> Comma-separated paths to files with third-party libraries (JAR or
+                                  Zip files) used by your tests. (For example, this should include
+                                  the junit jar). Wildcards can be used:
+                                  sonar.java.test.libraries=directory/**/*.jar
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "os",
+        bool_flag: false,
+        env: "SONAR_SCANNER_OS",
+        property: SONAR_SCANNER_OS,
+        usage: r##"
+    --os=<OS>                     The operating system of the machine hosting the SonarScanner.
+                                  Possible values: windows, linux, macos (or Darwin), alpine
+                   Default value: <autodetected value>
+"##,
+    },
+    OptDesc {
+        option: "arch",
+        bool_flag: false,
+        env: "SONAR_SCANNER_ARCH",
+        property: SONAR_SCANNER_ARCH,
+        usage: r##"
+    --arch=<ARCH>                 The CPU architecture type.
+                                  Possible values: x64 (or x86_64, amd64), aarch64 (or arm64)
+                   Default value: <autodetected value>
+"##,
+    },
+    OptDesc {
+        option: "skip-jre-provisioning",
+        bool_flag: true,
+        env: "SONAR_SCANNER_SKIP_JRE_PROVISIONING",
+        property: SONAR_SCANNER_SKIP_JRE_PROVISIONING,
+        usage: r##"
+    --skip-jre-provisioning       Skip the Java Runtime Environment (JRE) download from the
+                                  SonarQube instance.
+                   Default value: false
+"##,
+    },
+    OptDesc {
+        option: "java-exe-path",
+        bool_flag: false,
+        env: "SONAR_SCANNER_JAVA_EXE_PATH",
+        property: SONAR_SCANNER_JAVA_EXE_PATH,
+        usage: r##"
+    --java-exe-path=<PATH>        If defined, the SonarScanner runs with this Java executable.
+                   Default value: <bin/java of the provisioned or autodetected JRE>
+"##,
+    },
+    OptDesc {
+        option: "proxy-host",
+        bool_flag: false,
+        env: "SONAR_SCANNER_PROXY_HOST",
+        property: SONAR_SCANNER_PROXY_HOST,
+        usage: r##"
+    --proxy-host=<HOST>           The host name of the proxy server.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "proxy-port",
+        bool_flag: false,
+        env: "SONAR_SCANNER_PROXY_PORT",
+        property: SONAR_SCANNER_PROXY_PORT,
+        usage: r##"
+    --proxy-port=<PORT>           The port of the proxy server.
+                   Default value: <same port as sonar.host.url>
+"##,
+    },
+    OptDesc {
+        option: "proxy-user",
+        bool_flag: false,
+        env: "SONAR_SCANNER_PROXY_USER",
+        property: SONAR_SCANNER_PROXY_USER,
+        usage: r##"
+    --proxy-user=<USER>           In case of an authenticated proxy: the user name.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "proxy-password",
+        bool_flag: false,
+        env: "SONAR_SCANNER_PROXY_PASSWORD",
+        property: SONAR_SCANNER_PROXY_PASSWORD,
+        usage: r##"
+    --proxy-password=<PASSWORD>   In case of an authenticated proxy: the user password.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "sonar-home",
+        bool_flag: false,
+        env: "SONAR_USER_HOME",
+        property: SONAR_USER_HOME,
+        usage: r##"
+    --sonar-home=<PATH>           The directory for the scanner cache.
+                   Default value: ${HOME}/.sonar
+"##,
+    },
+    OptDesc {
+        option: "java-opts",
+        bool_flag: false,
+        env: "SONAR_SCANNER_JAVA_OPTS",
+        property: SONAR_SCANNER_JAVA_OPTS,
+        usage: r##"
+    --java-opts=<OPTS>            Arguments to pass to the JVM running the scanner engine.
+                   Default value: <empty>
+"##,
+    },
+    OptDesc {
+        option: "work-dir",
+        bool_flag: false,
+        env: "SONAR_SCANNER_WORK_DIR",
+        property: SONAR_WORKING_DIRECTORY,
+        usage: r##"
+    --work-dir=<DIR>              Path to the working directory used by the SonarScanner during a
+                                  project analysis to store temporary data. The path can be relative
+                                  (to the sonar.projectBaseDir property) or absolute.
+                   Default value: .scannerwork
+"##,
+    },
+    OptDesc {
+        option: "verbose",
+        bool_flag: true,
+        env: "SONAR_VERBOSE",
+        property: SONAR_VERBOSE,
+        usage: r##"
+    --verbose                     When present, adds more details to the analysis logs by activating
+                                  the DEBUG mode for the scanner.
+                   Default value: false
+"##,
+    },
+    OptDesc {
+        option: "log",
+        bool_flag: false,
+        env: "SONAR_LOG_LEVEL",
+        property: SONAR_LOG_LEVEL,
+        usage: r##"
+    --log=<LEVEL>                 The log level.
+                                  Possible values: INFO, DEBUG, TRACE
+                   Default value: <if sonar.verbose then DEBUG else INFO>
+"##,
+    },
+    OptDesc {
+        option: "truststore-path",
+        bool_flag: false,
+        env: "SONAR_SCANNER_TRUSTSTORE_PATH",
+        property: SONAR_SCANNER_TRUSTSTORE_PATH,
+        usage: r##"
+    --truststore-path=<PATH>      The path to the truststore file.
+                   Default value: <sonar.userHome>/ssl/truststore.p12
+"##,
+    },
+    OptDesc {
+        option: "truststore-password",
+        bool_flag: false,
+        env: "SONAR_SCANNER_TRUSTSTORE_PASSWORD",
+        property: SONAR_SCANNER_TRUSTSTORE_PASSWORD,
+        usage: r##"
+    --truststore-password=<PASS>  The password of the truststore.
+                   Default value: changeit
+"##,
+    },
+    OptDesc {
+        option: "keystore-path",
+        bool_flag: false,
+        env: "SONAR_SCANNER_KEYSTORE_PATH",
+        property: SONAR_SCANNER_KEYSTORE_PATH,
+        usage: r##"
+    --keystore-path=<PATH>        The path to the keystore file.
+                   Default value: <sonar.userHome>/ssl/keystore.p12
+"##,
+    },
+    OptDesc {
+        option: "keystore-password",
+        bool_flag: false,
+        env: "SONAR_SCANNER_KEYSTORE_PASSWORD",
+        property: SONAR_SCANNER_KEYSTORE_PASSWORD,
+        usage: r##"
+    --keystore-password=<PASS>    The password of the keystore file.
+                   Default value: sonar
+"##,
+    },
+    OptDesc {
+        option: "encoding",
+        bool_flag: false,
+        env: "SONAR_SOURCE_ENCODING",
+        property: SONAR_SOURCE_ENCODING,
+        usage: r##"
+    --encoding=<ENCODING>         Encoding of the source files.
+                   Default value: <system encoding>
+"##,
+    },
+    OptDesc {
+        option: "scanner-cli-version",
+        bool_flag: false,
+        env: "SONAR_SCANNER_INTERNAL_CLI_VERSION",
+        property: SONAR_SCANNER_INTERNAL_CLI_VERSION,
+        usage: r##"
+    --scanner-cli-version=<VER>   Force the analysis to download this version of the scanner from
+                                  binaries.sonarsource.com instead of using the one provided by the
+                                  sonar-scan executable.
+                   Default value: <the version embedded in the sonar-scan executable>
+"##,
+    },
+    OptDesc {
+        option: "dump",
+        bool_flag: true,
+        env: "SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES",
+        property: SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES,
+        usage: r##"
+    --dump                        Print all resolved options as JSON and exit.
+                   Default value: false
+"##,
+    },
+];
+
+pub const HELP_START: &str = r##"
 Run SonarQube analysis on a project without modifying your build configuration.
 
 USAGE:
@@ -20,183 +468,31 @@ Both formats are accepted:
   - Java property name prefixed with '-D'. For example: -Dsonar.token=VALUE
 
 OPTIONS:
+"##;
 
-    --token=<TOKEN>               Token used by the scanner to authenticate to your SonarQube
-                                  instance. This property has no default value and is mandatory.
-                   Env. variable: SONAR_TOKEN
-                   Property name: sonar.token
-
-    --dir=<PATH>                  The project's base directory. Use this property when you need the
-                                  analysis to take place in a directory other than the one from
-                                  which it was started.
-                   Default value: <current directory>
-                   Env. variable: SONAR_BASE_DIR
-                   Property name: sonar.projectBaseDir
-
-    --url=<URL>                   The URL to your SonarQube instance.
-                   Default value: https://sonarcloud.io
-                   Env. variable: SONAR_HOST_URL
-                   Property name: sonar.host.url
-
-    --org=<URL>                   (Only for SonarQube Cloud) The project organization.
-                   Default value: <Organization of the given token if there is only one>
-                   Env. variable: SONAR_ORGANIZATION
-                   Property name: sonar.organization
-
-    --region=<URL>                (Only for SonarQube Cloud) The SonarQube Cloud region:
-                                  Possible values: 'us', missing or emtpy.
-                                  * 'us' region set 'sonar.host.url' to 'https://sonarqube.us'
-                                  * missing or emtpy set 'sonar.host.url' to 'https://sonarcloud.io'
-                   Default value: <emtpy>
-                   Env. variable: SONAR_REGION
-                   Property name: sonar.region
-
-    --key=<KEY>                   The project's unique key. Can include up to 400 characters. All
-                                  letters, digits, dashes, underscores, periods, and colons are
-                                  accepted.
-                   Default value: <git repository name or base directory name>
-                   Env. variable: SONAR_PROJECT_KEY
-                   Property name: sonar.projectKey
-
-    --name=<NAME>                 Name of the project that will be displayed on the web interface.
-                   Default value: <value of sonar.projectKey>
-                   Env. variable: SONAR_PROJECT_NAME
-                   Property name: sonar.projectName
-
-    --version=<VERSION>           The project version. It should be set for branch analysis in case
-                                  you use the new code definition based on the previous version.
-                   Default value: <empty>
-                   Env. variable: SONAR_PROJECT_VERSION
-                   Property name: sonar.projectVersion
-
-    --description=<TEXT>          The project description.
-                   Default value: <empty>
-                   Env. variable: SONAR_PROJECT_DESCRIPTION
-                   Property name: sonar.projectDescription
-
-    --build-number=<NUMBER>       The project build number.
-                   Default value: <empty>
-                   Env. variable: SONAR_PROJECT_BUILD_NUMBER
-                   Property name: sonar.analysis.buildNumber
-
-    --sources=<PATHS>             The initial analysis scope for main source code (non-test code) in
-                                  the project. Comma-separated paths to directories are included. An
-                                  individual file in the list means that the file is included. A
-                                  directory in the list means that all analyzable files and
-                                  directories recursively below it are included. The path can be
-                                  relative (to the sonar.projectBaseDir property) or absolute.
-                                  Wildcards (*, ** and ?) are not allowed.
-                   Default value: <value of sonar.projectBaseDir>
-                   Env. variable: SONAR_PROJECT_SOURCES
-                   Property name: sonar.sources
-
-    --tests=<PATHS>               The initial analysis scope for test code in the project.
-                                  Same format as '--sources'.
-                   Default value: <empty>
-                   Env. variable: SONAR_PROJECT_TESTS
-                   Property name: sonar.tests
-
-    --os=<OS>                     The operating system of the machine hosting the SonarScanner.
-                                  Possible values: windows, linux, macos (or Darwin), alpine
-                   Default value: <autodetected value>
-                   Env. variable: SONAR_SCANNER_OS
-                   Property name: sonar.scanner.os
-
-    --arch=<ARCH>                 The CPU architecture type.
-                                  Possible values: x64 (or x86_64, amd64), aarch64 (or arm64)
-                   Default value: <autodetected value>
-                   Env. variable: SONAR_SCANNER_ARCH
-                   Property name: sonar.scanner.arch
-
-    --skip-jre-provisioning       Skip the Java Runtime Environment (JRE) download from the
-                                  SonarQube instance.
-                   Default value: false
-                   Env. variable: SONAR_SCANNER_SKIP_JRE_PROVISIONING
-                   Property name: sonar.scanner.skipJreProvisioning
-
-    --java-exe-path=<PATH>        If defined, the SonarScanner runs with this Java executable.
-                   Default value: <bin/java of the provisioned or autodetected JRE>
-                   Env. variable: SONAR_SCANNER_JAVA_EXE_PATH
-                   Property name: sonar.scanner.javaExePath
-
-    --proxy-host=<HOST>           The host name of the proxy server.
-                   Default value: <empty>
-                   Env. variable: SONAR_SCANNER_PROXY_HOST
-                   Property name: sonar.scanner.proxyHost
-
-    --proxy-port=<PORT>           The port of the proxy server.
-                   Default value: <same port as sonar.host.url>
-                   Env. variable: SONAR_SCANNER_PROXY_PORT
-                   Property name: sonar.scanner.proxyPort
-
-    --proxy-user=<USER>           In case of an authenticated proxy: the user name.
-                   Default value: <empty>
-                   Env. variable: SONAR_SCANNER_PROXY_USER
-                   Property name: sonar.scanner.proxyUser
-
-    --proxy-password=<PASSWORD>   In case of an authenticated proxy: the user password.
-                   Default value: <empty>
-                   Env. variable: SONAR_SCANNER_PROXY_PASSWORD
-                   Property name: sonar.scanner.proxyPassword
-
-    --sonar-home=<PATH>           The directory for the scanner cache.
-                   Default value: ${HOME}/.sonar
-                   Env. variable: SONAR_USER_HOME
-                   Property name: sonar.userHome
-
-    --java-opts=<OPTS>            Arguments to pass to the JVM running the scanner engine.
-                   Default value: <empty>
-                   Env. variable: SONAR_SCANNER_JAVA_OPTS
-                   Property name: sonar.scanner.javaOpts
-
-    --work-dir=<DIR>              Path to the working directory used by the SonarScanner during a
-                                  project analysis to store temporary data. The path can be relative
-                                  (to the sonar.projectBaseDir property) or absolute.
-                   Default value: .scannerwork
-                   Env. variable: SONAR_SCANNER_WORK_DIR
-                   Property name: sonar.working.directory
-
-    --verbose                     When present, adds more details to the analysis logs by activating
-                                  the DEBUG mode for the scanner.
-                   Property name: sonar.verbose
-
-    --log=<LEVEL>                 The log level.
-                                  Possible values: INFO, DEBUG, TRACE
-                   Default value: <if sonar.verbose then DEBUG else INFO>
-                   Env. variable: SONAR_LOG_LEVEL
-                   Property name: sonar.log.level
-
-    --truststore-path=<PATH>      The path to the truststore file.
-                   Default value: <sonar.userHome>/ssl/truststore.p12
-                   Property name: sonar.scanner.truststorePath
-
-    --truststore-password=<PASS>  The password of the truststore.
-                   Default value: changeit
-                   Property name: sonar.scanner.truststorePassword
-
-    --keystore-path=<PATH>        The path to the keystore file.
-                   Default value: <sonar.userHome>/ssl/keystore.p12
-                   Property name: sonar.scanner.keystorePath
-
-    --keystore-password=<PASS>    The password of the keystore file.
-                   Default value: sonar
-                   Property name: sonar.scanner.keystorePassword
-
-    --encoding=<ENCODING>         Encoding of the source files.
-                   Default value: <system encoding>
-                   Property name: sonar.sourceEncoding
-
+pub const HELP_END: &str = r##"
     --<property>=<value>          Any additional Sonar property, without the 'sonar.' prefix,
                                   where '.' can be replaced with '-'.
                                   For example: '--branch-name' becomes 'sonar.branch.name'
-
-    --scanner-version=<VERSION>   Force the analysis to download this version of the scanner from
-                                  binaries.sonarsource.com instead of using the one provided by the
-                                  SonarQube instance.
-                   Default value: <the version provided by the connected SonarQube instance>
-
-    --dump                        Print all resolved options as JSON and exit.
 "##;
+
+pub fn usage() -> String {
+    let mut usage = String::new();
+    usage.push_str(HELP_START);
+    for opt in OPTIONS {
+        usage.push_str(opt.usage);
+        if !opt.env.starts_with("SONAR_SCANNER_INTERNAL_") {
+            let env = opt.env;
+            usage.push_str(&format!("                   Env. variable: {env}\n"));
+        }
+        if !opt.property.starts_with("sonar.scanner.internal.") {
+            let prop = opt.property;
+            usage.push_str(&format!("                   Property name: {prop}\n"));
+        }
+    }
+    usage.push_str(HELP_END);
+    usage
+}
 
 #[derive(Debug, PartialEq, Serialize, Default)]
 pub enum LogLevel {
@@ -223,779 +519,780 @@ impl LogLevel {
             "DEBUG" => Ok(LogLevel::DEBUG),
             "TRACE" => Ok(LogLevel::TRACE),
             _ => Err(format!(
-                "invalid log level: {s} (expected INFO, DEBUG or TRACE)"
+                "Invalid '{SONAR_LOG_LEVEL}' value '{s}', expected 'INFO', 'DEBUG' or 'TRACE'."
             )),
         }
     }
 }
 
-fn is_false(b: &bool) -> bool {
-    !b
-}
-
 #[derive(Debug, Serialize, Default)]
 pub struct ScannerOptions {
-    pub dir: PathBuf,
-    pub url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub build_number: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sources: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tests: Option<String>,
-    pub os: String,
-    pub arch: String,
-    #[serde(skip_serializing_if = "is_false")]
-    pub skip_jre_provisioning: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub java_exe_path: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy_host: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy_port: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy_user: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy_password: Option<String>,
-    pub sonar_home: PathBuf,
-    pub sonar_cache: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub java_opts: Option<String>,
-    pub work_dir: String,
-    #[serde(skip_serializing_if = "is_false")]
-    pub verbose: bool,
-    pub log_level: LogLevel,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub truststore_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub truststore_password: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub keystore_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub keystore_password: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_encoding: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scanner_version: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub scanner_properties: BTreeMap<String, String>,
-    #[serde(skip)]
-    pub dump: bool,
+    pub sonar_properties: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub other_args: Vec<String>,
 }
 
-pub fn default_os() -> Result<&'static str, String> {
-    match env::consts::OS {
-        "linux" => {
-            let is_alpine = std::fs::read_to_string("/etc/os-release")
-                .map(|content| content.lines().any(|line| line == "ID=alpine"))
-                .unwrap_or(false);
-            Ok(if is_alpine { "alpine" } else { "linux" })
-        }
-        "macos" => Ok("macos"),
-        "windows" => Ok("windows"),
-        os => Err(format!("unsupported operating system: {os}")),
+impl ScannerOptions {
+    pub fn project_base_directory(&self) -> Result<PathBuf, String> {
+        self.required_path(SONAR_PROJECT_BASE_DIR)
     }
-}
 
-pub fn resolve_os_alias(os: &str) -> &str {
-    match os.to_lowercase().as_str() {
-        "linux" | "gnu/linux" | "unix" => "linux",
-        "alpine" | "alpinelinux" | "alpine-linux" => "alpine",
-        "macos" | "mac" | "macosx" | "darwin" | "osx" => "macos",
-        "windows" | "win" | "win32" | "win64" => "windows",
-        s if s.starts_with("mingw") || s.starts_with("cygwin") || s.starts_with("msys") => {
-            "windows"
-        }
-        _ => os,
-    }
-}
-
-pub fn resolve_arch_alias(arch: &str) -> &str {
-    match arch.to_lowercase().as_str() {
-        "x64" | "x86_64" | "x86-64" | "amd64" => "x64",
-        "aarch64" | "arm64" => "aarch64",
-        _ => arch,
-    }
-}
-
-pub fn default_arch() -> Result<&'static str, String> {
-    // Unsupported: m68k, mips, mips32r6, mips64, mips64r6, csky, powerpc, powerpc64, riscv32,
-    //              riscv64, s390x, sparc, sparc64, hexagon, loongarch32, loongarch64
-    match env::consts::ARCH {
-        "x86_64" | "x86" => Ok("x64"),
-        "aarch64" | "arm" => Ok("aarch64"),
-        arch => Err(format!("unsupported architecture: {arch}")),
-    }
-}
-
-// Extract the value for --prefix=VALUE or --prefix VALUE.
-// For the space form, increments *i to consume the value arg (but only if value doesn't start with --).
-fn arg_value(arg: &str, prefix: &str, args: &[String], i: &mut usize) -> Option<String> {
-    let eq_prefix = format!("{prefix}=");
-    if let Some(v) = arg.strip_prefix(&eq_prefix) {
-        Some(v.to_string())
-    } else if arg == prefix {
-        let next = args.get(*i + 1);
-        if let Some(v) = next.filter(|v| !v.starts_with("--")) {
-            *i += 1;
-            Some(v.clone())
+    pub fn log_level(&self) -> LogLevel {
+        if let Some(level) = self.optional(SONAR_LOG_LEVEL) {
+            LogLevel::parse(level).unwrap_or_else(|_| LogLevel::INFO)
         } else {
-            None
+            LogLevel::INFO
+        }
+    }
+
+    pub fn show_debug_log(&self) -> bool {
+        let level = self.log_level();
+        level == LogLevel::DEBUG || level == LogLevel::TRACE
+    }
+
+    pub fn sonar_home(&self) -> Result<PathBuf, String> {
+        Ok(PathBuf::from(self.required(SONAR_USER_HOME)?))
+    }
+
+    pub fn sonar_cache(&self) -> Result<PathBuf, String> {
+        Ok(self.sonar_home()?.join("cache"))
+    }
+
+    pub fn required(&self, property: &str) -> Result<&String, String> {
+        if let Some(url) = self.sonar_properties.get(property) {
+            Ok(url)
+        } else {
+            Err(format!("Missing required property: {property}"))
+        }
+    }
+
+    pub fn optional(&self, property: &str) -> Option<&String> {
+        self.sonar_properties.get(property)
+    }
+
+    pub fn required_path(&self, property: &str) -> Result<PathBuf, String> {
+        if let Some(path_str) = self.sonar_properties.get(property) {
+            let path = PathBuf::from_str(path_str).map_err(|e| {
+                format!("Invalid path for property '{property}' with value '{path_str}': {e}")
+            })?;
+            Ok(path)
+        } else {
+            Err(format!("Missing required property: {property}"))
+        }
+    }
+
+    pub fn is_true(&self, property: &str) -> bool {
+        if let Some(value) = self.sonar_properties.get(property) {
+            value == "true"
+        } else {
+            false
+        }
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum ArgKind {
+    DoubleDash,      // e.g., --foo
+    DoubleDashEqual, // e.g., --foo=123
+    DashDEqual,      // e.g., -Dfoo=123
+}
+
+#[derive(Debug, PartialEq)]
+struct ParsedArg {
+    kind: ArgKind,
+    name: String,
+    value: String,
+}
+
+fn parse_arg(arg: &str) -> Option<ParsedArg> {
+    if let Some(rest) = arg.strip_prefix("--") {
+        if rest.is_empty() {
+            // "--"
+            return None;
+        }
+        if let Some((name, value)) = rest.split_once('=') {
+            if name.is_empty() {
+                return None;
+            } // e.g. "--=123"
+            Some(ParsedArg {
+                // e.g. "--foo=123"
+                kind: ArgKind::DoubleDashEqual,
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        } else {
+            Some(ParsedArg {
+                // e.g. "--foo"
+                kind: ArgKind::DoubleDash,
+                name: rest.to_string(),
+                value: String::new(),
+            })
+        }
+    } else if let Some(rest) = arg.strip_prefix("-D") {
+        if let Some((name, value)) = rest.split_once('=') {
+            if name.is_empty() {
+                return None;
+            } // e.g. "-D=123"
+            Some(ParsedArg {
+                // e.g. "-Dfoo=123"
+                kind: ArgKind::DashDEqual,
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        } else {
+            None // e.g. "-Dfoo"
         }
     } else {
-        None
+        None // e.g. "foo" or ""
     }
+}
+
+fn find_option(arg: &ParsedArg) -> Option<&'static OptDesc> {
+    match arg.kind {
+        ArgKind::DoubleDash | ArgKind::DoubleDashEqual => {
+            for opt in OPTIONS {
+                if opt.option == arg.name {
+                    return Some(opt);
+                }
+            }
+        }
+        ArgKind::DashDEqual => {
+            for opt in OPTIONS {
+                if opt.property == arg.name {
+                    return Some(opt);
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn parse_options(
     args: &[String],
     env_fn: &dyn Fn(&str) -> Option<String>,
 ) -> Result<ScannerOptions, String> {
-    let url_from_env = env_fn("SONAR_HOST_URL");
-    let mut url_explicit = url_from_env.is_some();
-    let mut url = url_from_env.unwrap_or_else(|| DEFAULT_URL.to_string());
-    let mut organization: Option<String> = env_fn("SONAR_ORGANIZATION");
-    let mut region: Option<String> = env_fn("SONAR_REGION");
-
-    let mut dir_str: Option<String> = env_fn("SONAR_BASE_DIR");
-    let mut dir_explicit = dir_str.is_some();
-
-    let mut token: Option<String> = env_fn("SONAR_TOKEN");
-    let mut key: Option<String> = env_fn("SONAR_PROJECT_KEY");
-    let mut name: Option<String> = env_fn("SONAR_PROJECT_NAME");
-    let mut version: Option<String> = env_fn("SONAR_PROJECT_VERSION");
-    let mut description: Option<String> = env_fn("SONAR_PROJECT_DESCRIPTION");
-    let mut build_number: Option<String> = env_fn("SONAR_PROJECT_BUILD_NUMBER");
-    let mut sources: Option<String> = env_fn("SONAR_PROJECT_SOURCES");
-    let mut tests: Option<String> = env_fn("SONAR_PROJECT_TESTS");
-
-    let os_from_env = env_fn("SONAR_SCANNER_OS");
-    let mut os_explicit = os_from_env.is_some();
-    let mut os: String = match os_from_env {
-        Some(v) => v,
-        None => default_os()?.to_owned(),
+    let mut options = ScannerOptions {
+        sonar_properties: BTreeMap::new(),
+        other_args: Vec::new(),
     };
-
-    let arch_from_env = env_fn("SONAR_SCANNER_ARCH");
-    let mut arch_explicit = arch_from_env.is_some();
-    let mut arch: String = match arch_from_env {
-        Some(v) => v,
-        None => default_arch()?.to_owned(),
-    };
-
-    let mut skip_jre_provisioning = env_fn("SONAR_SCANNER_SKIP_JRE_PROVISIONING")
-        .map(|v| v == "true")
-        .unwrap_or(false);
-    let mut java_exe_path: Option<PathBuf> =
-        env_fn("SONAR_SCANNER_JAVA_EXE_PATH").map(PathBuf::from);
-    let mut proxy_host: Option<String> = env_fn("SONAR_SCANNER_PROXY_HOST");
-    let mut proxy_port: Option<u16> = env_fn("SONAR_SCANNER_PROXY_PORT")
-        .map(|v| {
-            v.parse::<u16>()
-                .map_err(|_| format!("invalid proxy port: {v}"))
-        })
-        .transpose()?;
-    let mut proxy_user: Option<String> = env_fn("SONAR_SCANNER_PROXY_USER");
-    let mut proxy_password: Option<String> = env_fn("SONAR_SCANNER_PROXY_PASSWORD");
-
-    let sonar_home_from_env = env_fn("SONAR_USER_HOME");
-    let mut sonar_home_explicit = sonar_home_from_env.is_some();
-    let mut sonar_home_str: Option<String> = sonar_home_from_env;
-
-    let mut java_opts: Option<String> = env_fn("SONAR_SCANNER_JAVA_OPTS");
-    let work_dir_from_env = env_fn("SONAR_SCANNER_WORK_DIR");
-    let mut work_dir_explicit = work_dir_from_env.is_some();
-    let mut work_dir = work_dir_from_env.unwrap_or_else(|| DEFAULT_WORK_DIR.to_string());
-    let mut verbose = false;
-    let log_level_from_env = env_fn("SONAR_LOG_LEVEL");
-    let mut log_level_explicit = log_level_from_env.is_some();
-    let mut log_level = log_level_from_env
-        .map(|v| LogLevel::parse(&v))
-        .transpose()?
-        .unwrap_or(LogLevel::INFO);
-    let mut truststore_path: Option<String> = None;
-    let mut truststore_password: Option<String> = None;
-    let mut keystore_path: Option<String> = None;
-    let mut keystore_password: Option<String> = None;
-    let mut source_encoding: Option<String> = None;
-    let mut scanner_version: Option<String> = None;
-    let mut dump = false;
-    let mut extra_properties: BTreeMap<String, String> = BTreeMap::new();
-
-    let mut i = 0;
-    while i < args.len() {
-        let arg = args[i].as_str();
-
-        if arg == "--dump" {
-            dump = true;
-        } else if arg == "--verbose" {
-            verbose = true;
-        } else if arg == "--skip-jre-provisioning" {
-            skip_jre_provisioning = true;
-        } else if let Some(v) = arg_value(arg, "--dir", args, &mut i) {
-            dir_str = Some(v);
-            dir_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--url", args, &mut i) {
-            url = v;
-            url_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--org", args, &mut i) {
-            organization = Some(v);
-        } else if let Some(v) = arg_value(arg, "--region", args, &mut i) {
-            region = Some(v);
-        } else if let Some(v) = arg_value(arg, "--token", args, &mut i) {
-            token = Some(v);
-        } else if let Some(v) = arg_value(arg, "--key", args, &mut i) {
-            key = Some(v);
-        } else if let Some(v) = arg_value(arg, "--name", args, &mut i) {
-            name = Some(v);
-        } else if let Some(v) = arg_value(arg, "--version", args, &mut i) {
-            version = Some(v);
-        } else if let Some(v) = arg_value(arg, "--description", args, &mut i) {
-            description = Some(v);
-        } else if let Some(v) = arg_value(arg, "--build-number", args, &mut i) {
-            build_number = Some(v);
-        } else if let Some(v) = arg_value(arg, "--sources", args, &mut i) {
-            sources = Some(v);
-        } else if let Some(v) = arg_value(arg, "--tests", args, &mut i) {
-            tests = Some(v);
-        } else if let Some(v) = arg_value(arg, "--os", args, &mut i) {
-            os = resolve_os_alias(&v).to_owned();
-            os_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--arch", args, &mut i) {
-            arch = resolve_arch_alias(&v).to_owned();
-            arch_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--java-exe-path", args, &mut i) {
-            java_exe_path = Some(PathBuf::from(v));
-        } else if let Some(v) = arg_value(arg, "--proxy-host", args, &mut i) {
-            proxy_host = Some(v);
-        } else if let Some(v) = arg_value(arg, "--proxy-port", args, &mut i) {
-            proxy_port = Some(
-                v.parse::<u16>()
-                    .map_err(|_| format!("invalid proxy port: {v}"))?,
-            );
-        } else if let Some(v) = arg_value(arg, "--proxy-user", args, &mut i) {
-            proxy_user = Some(v);
-        } else if let Some(v) = arg_value(arg, "--proxy-password", args, &mut i) {
-            proxy_password = Some(v);
-        } else if let Some(v) = arg_value(arg, "--sonar-home", args, &mut i) {
-            sonar_home_str = Some(v);
-            sonar_home_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--java-opts", args, &mut i) {
-            java_opts = Some(v);
-        } else if let Some(v) = arg_value(arg, "--work-dir", args, &mut i) {
-            work_dir = v;
-            work_dir_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--log", args, &mut i) {
-            log_level = LogLevel::parse(&v)?;
-            log_level_explicit = true;
-        } else if let Some(v) = arg_value(arg, "--truststore-path", args, &mut i) {
-            truststore_path = Some(v);
-        } else if let Some(v) = arg_value(arg, "--truststore-password", args, &mut i) {
-            truststore_password = Some(v);
-        } else if let Some(v) = arg_value(arg, "--keystore-path", args, &mut i) {
-            keystore_path = Some(v);
-        } else if let Some(v) = arg_value(arg, "--keystore-password", args, &mut i) {
-            keystore_password = Some(v);
-        } else if let Some(v) = arg_value(arg, "--encoding", args, &mut i) {
-            source_encoding = Some(v);
-        } else if let Some(v) = arg_value(arg, "--scanner-version", args, &mut i) {
-            scanner_version = Some(v);
-        } else if arg.starts_with("--") {
-            let rest = &arg[2..];
-            if let Some(eq) = rest.find('=') {
-                let prop_key = format!("sonar.{}", rest[..eq].replace('-', "."));
-                let prop_val = rest[eq + 1..].to_string();
-                extra_properties.insert(prop_key, prop_val);
-            } else {
-                let next = args.get(i + 1).filter(|v| !v.starts_with("--"));
-                match next {
-                    Some(v) => {
-                        let prop_key = format!("sonar.{}", rest.replace('-', "."));
-                        extra_properties.insert(prop_key, v.clone());
-                        i += 1;
-                    }
-                    None => return Err(format!("missing value for argument: {arg}")),
-                }
-            }
-        } else if let Some(darg) = arg.strip_prefix("-D") {
-            if let Some(eq) = darg.find('=') {
-                let prop = &darg[..eq];
-                let val = darg[eq + 1..].to_string();
-                match prop {
-                    "sonar.token" => token = Some(val),
-                    "sonar.projectBaseDir" => { dir_str = Some(val); dir_explicit = true; }
-                    "sonar.host.url" => { url = val; url_explicit = true; }
-                    "sonar.organization" => { organization = Some(val); }
-                    "sonar.region" => { region = Some(val); }
-                    "sonar.projectKey" => key = Some(val),
-                    "sonar.projectName" => name = Some(val),
-                    "sonar.projectVersion" => version = Some(val),
-                    "sonar.projectDescription" => description = Some(val),
-                    "sonar.analysis.buildNumber" => build_number = Some(val),
-                    "sonar.sources" => sources = Some(val),
-                    "sonar.tests" => tests = Some(val),
-                    "sonar.scanner.os" => { os = resolve_os_alias(&val).to_owned(); os_explicit = true; }
-                    "sonar.scanner.arch" => { arch = resolve_arch_alias(&val).to_owned(); arch_explicit = true; }
-                    "sonar.scanner.skipJreProvisioning" => skip_jre_provisioning = val == "true",
-                    "sonar.scanner.javaExePath" => java_exe_path = Some(PathBuf::from(val)),
-                    "sonar.scanner.proxyHost" => proxy_host = Some(val),
-                    "sonar.scanner.proxyPort" => proxy_port = Some(
-                        val.parse::<u16>().map_err(|_| format!("invalid proxy port: {val}"))?,
-                    ),
-                    "sonar.scanner.proxyUser" => proxy_user = Some(val),
-                    "sonar.scanner.proxyPassword" => proxy_password = Some(val),
-                    "sonar.userHome" => { sonar_home_str = Some(val); sonar_home_explicit = true; }
-                    "sonar.scanner.javaOpts" => java_opts = Some(val),
-                    "sonar.working.directory" => { work_dir = val; work_dir_explicit = true; }
-                    "sonar.verbose" => verbose = val == "true",
-                    "sonar.log.level" => { log_level = LogLevel::parse(&val)?; log_level_explicit = true; }
-                    "sonar.scanner.truststorePath" => truststore_path = Some(val),
-                    "sonar.scanner.truststorePassword" => truststore_password = Some(val),
-                    "sonar.scanner.keystorePath" => keystore_path = Some(val),
-                    "sonar.scanner.keystorePassword" => keystore_password = Some(val),
-                    "sonar.sourceEncoding" => source_encoding = Some(val),
-                    _ => { extra_properties.insert(prop.to_string(), val); }
-                }
-            } else {
-                return Err(format!("missing '=' in argument: {arg}"));
-            }
-        } else {
-            return Err(format!("unexpected argument: {arg}"));
-        }
-
-        i += 1;
-    }
-
-    let dir = match dir_str {
-        Some(ref s) => PathBuf::from(s)
-            .canonicalize()
-            .map_err(|_| format!("Project path does not exist: {s}"))?,
-        None => env::current_dir().map_err(|e| e.to_string())?,
-    };
-
-    let sonar_home = match sonar_home_str {
-        Some(ref s) => PathBuf::from(s),
-        None => {
-            let home = env_fn("HOME")
-                .or_else(|| env_fn("USERPROFILE"))
-                .ok_or_else(|| "User HOME directory not found".to_string())?;
-            PathBuf::from(home).join(".sonar")
-        }
-    };
-
-    let sonar_cache = sonar_home.join("cache");
-
-    let mut scanner_properties = extra_properties;
-
-    if dir_explicit {
-        scanner_properties.insert(
-            "sonar.projectBaseDir".to_string(),
-            dir.to_string_lossy().into_owned(),
-        );
-    }
-    if url_explicit {
-        scanner_properties.insert("sonar.host.url".to_string(), url.clone());
-    }
-    if let Some(ref v) = organization {
-        scanner_properties.insert("sonar.organization".to_string(), v.clone());
-    }
-    if let Some(ref v) = region {
-        scanner_properties.insert("sonar.region".to_string(), v.clone());
-    }
-    if let Some(ref v) = token {
-        scanner_properties.insert("sonar.token".to_string(), v.clone());
-    }
-    if let Some(ref v) = key {
-        scanner_properties.insert("sonar.projectKey".to_string(), v.clone());
-    }
-    if let Some(ref v) = name {
-        scanner_properties.insert("sonar.projectName".to_string(), v.clone());
-    }
-    if let Some(ref v) = version {
-        scanner_properties.insert("sonar.projectVersion".to_string(), v.clone());
-    }
-    if let Some(ref v) = description {
-        scanner_properties.insert("sonar.projectDescription".to_string(), v.clone());
-    }
-    if let Some(ref v) = build_number {
-        scanner_properties.insert("sonar.analysis.buildNumber".to_string(), v.clone());
-    }
-    if let Some(ref v) = sources {
-        scanner_properties.insert("sonar.sources".to_string(), v.clone());
-    }
-    if let Some(ref v) = tests {
-        scanner_properties.insert("sonar.tests".to_string(), v.clone());
-    }
-    if os_explicit {
-        scanner_properties.insert("sonar.scanner.os".to_string(), os.clone());
-    }
-    if arch_explicit {
-        scanner_properties.insert("sonar.scanner.arch".to_string(), arch.clone());
-    }
-    if skip_jre_provisioning {
-        scanner_properties.insert(
-            "sonar.scanner.skipJreProvisioning".to_string(),
-            "true".to_string(),
-        );
-    }
-    if let Some(ref v) = java_exe_path {
-        scanner_properties.insert(
-            "sonar.scanner.javaExePath".to_string(),
-            v.to_string_lossy().into_owned(),
-        );
-    }
-    if let Some(ref v) = proxy_host {
-        scanner_properties.insert("sonar.scanner.proxyHost".to_string(), v.clone());
-    }
-    if let Some(v) = proxy_port {
-        scanner_properties.insert("sonar.scanner.proxyPort".to_string(), v.to_string());
-    }
-    if let Some(ref v) = proxy_user {
-        scanner_properties.insert("sonar.scanner.proxyUser".to_string(), v.clone());
-    }
-    if let Some(ref v) = proxy_password {
-        scanner_properties.insert("sonar.scanner.proxyPassword".to_string(), v.clone());
-    }
-    if sonar_home_explicit {
-        scanner_properties.insert(
-            "sonar.userHome".to_string(),
-            sonar_home.to_string_lossy().into_owned(),
-        );
-    }
-    if let Some(ref v) = java_opts {
-        scanner_properties.insert("sonar.scanner.javaOpts".to_string(), v.clone());
-    }
-    if work_dir_explicit {
-        scanner_properties.insert("sonar.working.directory".to_string(), work_dir.clone());
-    }
-    if verbose {
-        scanner_properties.insert("sonar.verbose".to_string(), "true".to_string());
-    }
-    if log_level_explicit {
-        scanner_properties.insert("sonar.log.level".to_string(), log_level.to_string());
-    }
-    if let Some(ref v) = truststore_path {
-        scanner_properties.insert("sonar.scanner.truststorePath".to_string(), v.clone());
-    }
-    if let Some(ref v) = truststore_password {
-        scanner_properties.insert("sonar.scanner.truststorePassword".to_string(), v.clone());
-    }
-    if let Some(ref v) = keystore_path {
-        scanner_properties.insert("sonar.scanner.keystorePath".to_string(), v.clone());
-    }
-    if let Some(ref v) = keystore_password {
-        scanner_properties.insert("sonar.scanner.keystorePassword".to_string(), v.clone());
-    }
-    if let Some(ref v) = source_encoding {
-        scanner_properties.insert("sonar.sourceEncoding".to_string(), v.clone());
-    }
-
-    Ok(ScannerOptions {
-        dir,
-        url,
-        token,
-        key,
-        name,
-        version,
-        description,
-        build_number,
-        sources,
-        tests,
-        os,
-        arch,
-        skip_jre_provisioning,
-        java_exe_path,
-        proxy_host,
-        proxy_port,
-        proxy_user,
-        proxy_password,
-        sonar_home,
-        sonar_cache,
-        java_opts,
-        work_dir,
-        verbose,
-        log_level,
-        truststore_path,
-        truststore_password,
-        keystore_path,
-        keystore_password,
-        source_encoding,
-        scanner_version,
-        scanner_properties,
-        dump,
-    })
+    add_options_from_args(&mut options, &args)?;
+    add_missing_options_from_env(&mut options, env_fn);
+    infer_missing_options(&mut options)?;
+    Ok(options)
 }
 
-impl ScannerOptions {
-    pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|e| format!("{{\"error\": \"{e}\"}}"))
+
+fn add_missing_options_from_env(
+    options: &mut ScannerOptions,
+    env_fn: &dyn Fn(&str) -> Option<String>,
+) {
+    let properties = &mut options.sonar_properties;
+    for opt in OPTIONS {
+        if !properties.contains_key(opt.property) {
+            if let Some(value) = env_fn(opt.env) {
+                properties.insert(
+                    opt.property.to_string(),
+                    if opt.bool_flag {
+                        value.to_lowercase()
+                    } else {
+                        value
+                    },
+                );
+            }
+        }
     }
+}
+
+fn add_options_from_args(options: &mut ScannerOptions, args: &[String]) -> Result<(), String> {
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if let Some(parsed_arg) = parse_arg(&args[i]) {
+            if let Some(opt) = find_option(&parsed_arg) {
+                let value: String = if opt.bool_flag && parsed_arg.kind == ArgKind::DoubleDash {
+                    "true".to_string()
+                } else if parsed_arg.kind == ArgKind::DoubleDashEqual
+                    || parsed_arg.kind == ArgKind::DashDEqual
+                {
+                    parsed_arg.value
+                } else {
+                    // DoubleDash && !bool_flag
+                    let Some(next) = args.get(i + 1).filter(|v| !v.starts_with("--")) else {
+                        return Err(format!("Missing value for argument: {arg}"));
+                    };
+                    i += 1;
+                    next.clone()
+                };
+                options
+                    .sonar_properties
+                    .insert(opt.property.to_string(), value);
+            } else {
+                if parsed_arg.kind == ArgKind::DashDEqual && parsed_arg.name.starts_with("sonar.") {
+                    options
+                        .sonar_properties
+                        .insert(parsed_arg.name, parsed_arg.value);
+                } else {
+                    options.other_args.push(arg.clone());
+                }
+            }
+        } else {
+            options.other_args.push(arg.clone());
+        };
+        i += 1;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::env;
     use super::*;
     use indoc::indoc;
-
-    fn fixed_env(k: &str) -> Option<String> {
-        match k {
-            "HOME" => Some("/home/user".to_string()),
-            _ => None,
-        }
-    }
+    use regex::Regex;
+    use tempfile::tempdir;
 
     fn cur_dir() -> String {
         env::current_dir().unwrap().to_string_lossy().into_owned()
     }
 
-    #[test]
-    fn default_os_returns_known_value() {
-        let os = default_os().expect("current OS should be supported");
-        assert!(["linux", "alpine", "macos", "windows"].contains(&os));
+    fn user_dir() -> String {
+        dirs::home_dir().unwrap().to_string_lossy().into_owned()
+    }
+
+    fn remove_os(input: &str) -> String {
+        let re = Regex::new(r#""sonar\.scanner\.os": "(?:linux|alpine|macos|windows)""#).unwrap();
+        re.replace(input, r#""sonar.scanner.os"": "<os>""#).to_string()
+    }
+
+    fn remove_arch(input: &str) -> String {
+        let re = Regex::new(r#""sonar\.scanner\.arch": "(?:aarch64|x64)""#).unwrap();
+        re.replace(input, r#""sonar.scanner.arch"": "<arch>""#).to_string()
+    }
+
+    fn json_from_parse_options(args: &[&str], env: &[(&str, &str)]) -> Result<String, String> {
+        let string_args: &[String] = &args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        let env_map: HashMap<&str, &str> = env.iter().copied().collect();
+        let env_closure = |key: &str| -> Option<String> {
+            env_map.get(key).map(|val| val.to_string())
+        };
+        let options = parse_options(string_args, &env_closure)?;
+        let mut json = options.to_json()
+            .replace(&cur_dir(), "<current-dir>")
+            .replace(&user_dir(), "<user-home>");
+        json = remove_os(&json);
+        json = remove_arch(&json);
+        json = json.replace("\\", "/");
+        Ok(json)
     }
 
     #[test]
-    fn default_arch_returns_known_value() {
-        let arch = default_arch().expect("current arch should be supported");
-        assert!(["x64", "aarch64"].contains(&arch));
-    }
-
-    #[test]
-    fn parse_options_defaults() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options = parse_options(&[], &fixed_env).unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_options_defaults() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/&[],
+                /*env*/&[])?,
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "https://sonarcloud.io",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "INFO"
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+          "sonar_properties": {
+            "sonar.host.url": "https://sonarcloud.io",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.scanner.apiBaseUrl": "https://api.sonarcloud.io",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.sonarcloudUrl": "https://sonarcloud.io",
+            "sonar.userHome": "<user-home>/.sonar"
+          }
+        }"#}
+        );
+        Ok(())
     }
 
     #[test]
-    fn parse_options_eq_form() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options = parse_options(
-            &[
-                format!("--dir={dir}"),
-                "--url=http://localhost:9000".to_string(),
-                "--token=sqa_1234567890".to_string(),
-                "--key=my-project".to_string(),
-                "--log=DEBUG".to_string(),
-            ],
-            &fixed_env,
-        )
-        .unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_options_eq_form() -> Result<(), String> {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_dir_path = tmp_dir.path().to_owned().canonicalize().unwrap();
+        let tmp_dir_str = tmp_dir_path.to_string_lossy().into_owned();
+        let project_dir = tmp_dir_path.join("my-project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let java_bin_dir = tmp_dir_path.join("jvm-25").join("jre").join("bin");
+        std::fs::create_dir_all(&java_bin_dir).unwrap();
+        let java_exe_path = java_bin_dir.join("java");
+        std::fs::write(&java_exe_path, "java exe ...").unwrap();
+        let java_exe_str = java_exe_path.to_string_lossy().into_owned();
+        let project_dir_str = project_dir.to_string_lossy();
+        let home_dir = dirs::home_dir().unwrap().to_string_lossy().into_owned();
+
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--token=sqa_1234567890",
+                    format!("--dir={project_dir_str}").as_str(),
+                    "--url=http://localhost:9000",
+                    "--org=BigCorp",
+                    "--region=us",
+                    "--key=my-project-key",
+                    "--name=My Project Name",
+                    "--version=1.2.3",
+                    "--description=Main Application",
+                    "--build-number=42",
+                    "--sources=src/main/java",
+                    "--tests=src/test/java",
+                    "--java-binaries=target/classes",
+                    "--java-libraries=target/libs/*.jar",
+                    "--java-test-binaries=target/test-classes",
+                    "--java-test-libraries=target/libs/*.jar,target/test-libs/*.jar",
+                    "--os=windows",
+                    "--arch=x64",
+                    "--skip-jre-provisioning",
+                    format!("--java-exe-path={java_exe_str}").as_str(),
+                    "--proxy-host=https://proxy.bigcorp.com",
+                    "--proxy-port=666",
+                    "--proxy-user=paul",
+                    "--proxy-password=Paul123456",
+                    format!("--sonar-home={home_dir}/.sonar-custom").as_str(),
+                    "--java-opts=-Xmx1024m",
+                    "--work-dir=.custom-work-dir",
+                    "--verbose",
+                    "--log=DEBUG",
+                    format!("--truststore-path={home_dir}/custom-truststore/ssl/truststore.p12").as_str(),
+                    "--truststore-password=TruststorePassword",
+                    format!("--keystore-path={home_dir}/custom-keystore/ssl/keystore.p12").as_str(),
+                    "--keystore-password=KeystorePassword",
+                    "--encoding=UTF-8",
+                    "--scanner-cli-version=7.2.0.5079",
+                    "--dump",
+                ],
+                /*env*/&[])?
+                .replace(&tmp_dir_str, "<tmp-dir>"),
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "http://localhost:9000",
-          "token": "sqa_1234567890",
-          "key": "my-project",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "DEBUG",
-          "scanner_properties": {
+          "sonar_properties": {
+            "sonar.analysis.buildNumber": "42",
             "sonar.host.url": "http://localhost:9000",
+            "sonar.java.binaries": "target/classes",
+            "sonar.java.libraries": "target/libs/*.jar",
+            "sonar.java.test.binaries": "target/test-classes",
+            "sonar.java.test.libraries": "target/libs/*.jar,target/test-libs/*.jar",
             "sonar.log.level": "DEBUG",
-            "sonar.projectBaseDir": "{dir}",
-            "sonar.projectKey": "my-project",
-            "sonar.token": "sqa_1234567890"
+            "sonar.organization": "BigCorp",
+            "sonar.projectBaseDir": "<tmp-dir>/my-project",
+            "sonar.projectDescription": "Main Application",
+            "sonar.projectKey": "my-project-key",
+            "sonar.projectName": "My Project Name",
+            "sonar.projectVersion": "1.2.3",
+            "sonar.region": "us",
+            "sonar.scanner.apiBaseUrl": "http://localhost:9000",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.cli.version": "7.2.0.5079",
+            "sonar.scanner.internal.dump.properties": "true",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.javaExePath": "<tmp-dir>/jvm-25/jre/bin/java",
+            "sonar.scanner.javaOpts": "-Xmx1024m",
+            "sonar.scanner.keystorePassword": "KeystorePassword",
+            "sonar.scanner.keystorePath": "<user-home>/custom-keystore/ssl/keystore.p12",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.proxyHost": "https://proxy.bigcorp.com",
+            "sonar.scanner.proxyPassword": "Paul123456",
+            "sonar.scanner.proxyPort": "666",
+            "sonar.scanner.proxyUser": "paul",
+            "sonar.scanner.skipJreProvisioning": "true",
+            "sonar.scanner.sonarcloudUrl": "http://localhost:9000",
+            "sonar.scanner.truststorePassword": "TruststorePassword",
+            "sonar.scanner.truststorePath": "<user-home>/custom-truststore/ssl/truststore.p12",
+            "sonar.sourceEncoding": "UTF-8",
+            "sonar.sources": "src/main/java",
+            "sonar.tests": "src/test/java",
+            "sonar.token": "sqa_1234567890",
+            "sonar.userHome": "<user-home>/.sonar-custom",
+            "sonar.verbose": "true",
+            "sonar.working.directory": ".custom-work-dir"
           }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+        }"#}
+        );
+        tmp_dir.close().unwrap();
+        Ok(())
     }
 
     #[test]
-    fn parse_options_space_form() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options = parse_options(
-            &[
-                "--token".to_string(),
-                "mytoken".to_string(),
-                "--dir".to_string(),
-                dir.clone(),
-            ],
-            &fixed_env,
-        )
-        .unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_options_space_form() -> Result<(), String> {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_dir_path = tmp_dir.path().to_owned().canonicalize().unwrap();
+        let tmp_dir_str = tmp_dir_path.to_string_lossy().into_owned();
+        let project_dir = tmp_dir_path.join("my-project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let java_bin_dir = tmp_dir_path.join("jvm-25").join("jre").join("bin");
+        std::fs::create_dir_all(&java_bin_dir).unwrap();
+        let java_exe_path = java_bin_dir.join("java");
+        std::fs::write(&java_exe_path, "java exe ...").unwrap();
+        let java_exe_str = java_exe_path.to_string_lossy().into_owned();
+        let project_dir_str = project_dir.to_string_lossy();
+        let home_dir = dirs::home_dir().unwrap().to_string_lossy().into_owned();
+
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--token", "sqa_1234567890",
+                    "--dir", &project_dir_str,
+                    "--url", "http://localhost:9000",
+                    "--org", "BigCorp",
+                    "--region", "us",
+                    "--key", "my-project-key",
+                    "--name", "My Project Name",
+                    "--version", "1.2.3",
+                    "--description", "Main Application",
+                    "--build-number", "42",
+                    "--sources", "src/main/java",
+                    "--tests", "src/test/java",
+                    "--java-binaries", "target/classes",
+                    "--java-libraries", "target/libs/*.jar",
+                    "--java-test-binaries", "target/test-classes",
+                    "--java-test-libraries", "target/libs/*.jar,target/test-libs/*.jar",
+                    "--os", "windows",
+                    "--arch", "x64",
+                    "--skip-jre-provisioning",
+                    "--java-exe-path", &java_exe_str,
+                    "--proxy-host", "https://proxy.bigcorp.com",
+                    "--proxy-port", "666",
+                    "--proxy-user", "paul",
+                    "--proxy-password", "Paul123456",
+                    "--sonar-home", format!("{home_dir}/.sonar-custom").as_str(),
+                    "--java-opts", "-Xmx1024m",
+                    "--work-dir", ".custom-work-dir",
+                    "--verbose",
+                    "--log", "DEBUG",
+                    "--truststore-path", format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str(),
+                    "--truststore-password", "TruststorePassword",
+                    "--keystore-path", format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str(),
+                    "--keystore-password", "KeystorePassword",
+                    "--encoding", "UTF-8",
+                    "--scanner-cli-version", "7.2.0.5079",
+                    "--dump",
+                ],
+                /*env*/&[])?
+                .replace(&tmp_dir_str, "<tmp-dir>"),
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "https://sonarcloud.io",
-          "token": "mytoken",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "INFO",
-          "scanner_properties": {
-            "sonar.projectBaseDir": "{dir}",
-            "sonar.token": "mytoken"
+          "sonar_properties": {
+            "sonar.analysis.buildNumber": "42",
+            "sonar.host.url": "http://localhost:9000",
+            "sonar.java.binaries": "target/classes",
+            "sonar.java.libraries": "target/libs/*.jar",
+            "sonar.java.test.binaries": "target/test-classes",
+            "sonar.java.test.libraries": "target/libs/*.jar,target/test-libs/*.jar",
+            "sonar.log.level": "DEBUG",
+            "sonar.organization": "BigCorp",
+            "sonar.projectBaseDir": "<tmp-dir>/my-project",
+            "sonar.projectDescription": "Main Application",
+            "sonar.projectKey": "my-project-key",
+            "sonar.projectName": "My Project Name",
+            "sonar.projectVersion": "1.2.3",
+            "sonar.region": "us",
+            "sonar.scanner.apiBaseUrl": "http://localhost:9000",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.cli.version": "7.2.0.5079",
+            "sonar.scanner.internal.dump.properties": "true",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.javaExePath": "<tmp-dir>/jvm-25/jre/bin/java",
+            "sonar.scanner.javaOpts": "-Xmx1024m",
+            "sonar.scanner.keystorePassword": "KeystorePassword",
+            "sonar.scanner.keystorePath": "<user-home>/custom-keystore/ssl/keystore.p12",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.proxyHost": "https://proxy.bigcorp.com",
+            "sonar.scanner.proxyPassword": "Paul123456",
+            "sonar.scanner.proxyPort": "666",
+            "sonar.scanner.proxyUser": "paul",
+            "sonar.scanner.skipJreProvisioning": "true",
+            "sonar.scanner.sonarcloudUrl": "http://localhost:9000",
+            "sonar.scanner.truststorePassword": "TruststorePassword",
+            "sonar.scanner.truststorePath": "<user-home>/custom-truststore/ssl/truststore.p12",
+            "sonar.sourceEncoding": "UTF-8",
+            "sonar.sources": "src/main/java",
+            "sonar.tests": "src/test/java",
+            "sonar.token": "sqa_1234567890",
+            "sonar.userHome": "<user-home>/.sonar-custom",
+            "sonar.verbose": "true",
+            "sonar.working.directory": ".custom-work-dir"
           }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+        }"#}
+        );
+        tmp_dir.close().unwrap();
+        Ok(())
     }
 
     #[test]
-    fn parse_options_unknown_arg_becomes_sonar_property() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options =
-            parse_options(&["--some-custom-prop=hello".to_string()], &fixed_env).unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_env_variables() -> Result<(), String> {
+        let tmp_dir = tempdir().unwrap();
+        let tmp_dir_path = tmp_dir.path().to_owned().canonicalize().unwrap();
+        let tmp_dir_str = tmp_dir_path.to_string_lossy().into_owned();
+        let project_dir = tmp_dir_path.join("my-project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let java_bin_dir = tmp_dir_path.join("jvm-25").join("jre").join("bin");
+        std::fs::create_dir_all(&java_bin_dir).unwrap();
+        let java_exe_path = java_bin_dir.join("java");
+        std::fs::write(&java_exe_path, "java exe ...").unwrap();
+        let java_exe_str = java_exe_path.to_string_lossy().into_owned();
+        let project_dir_str = project_dir.to_string_lossy();
+        let home_dir = dirs::home_dir().unwrap().to_string_lossy().into_owned();
+
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[],
+                /*env*/&[
+                    ("SONAR_TOKEN", "sqa_1234567890"),
+                    ("SONAR_BASE_DIR", &project_dir_str),
+                    ("SONAR_HOST_URL", "http://localhost:9000"),
+                    ("SONAR_ORGANIZATION", "BigCorp"),
+                    ("SONAR_REGION", "us"),
+                    ("SONAR_PROJECT_KEY", "my-project-key"),
+                    ("SONAR_PROJECT_NAME", "My Project Name"),
+                    ("SONAR_PROJECT_VERSION", "1.2.3"),
+                    ("SONAR_PROJECT_DESCRIPTION", "Main Application"),
+                    ("SONAR_PROJECT_BUILD_NUMBER", "42"),
+                    ("SONAR_PROJECT_SOURCES", "src/main/java"),
+                    ("SONAR_PROJECT_TESTS", "src/test/java"),
+                    ("SONAR_JAVA_BINARIES", "target/classes"),
+                    ("SONAR_JAVA_LIBRARIES", "target/libs/*.jar"),
+                    ("SONAR_JAVA_TEST_BINARIES", "target/test-classes"),
+                    ("SONAR_JAVA_TEST_LIBRARIES", "target/libs/*.jar,target/test-libs/*.jar"),
+                    ("SONAR_SCANNER_OS", "windows"),
+                    ("SONAR_SCANNER_ARCH", "x64"),
+                    ("SONAR_SCANNER_SKIP_JRE_PROVISIONING", "true"),
+                    ("SONAR_SCANNER_JAVA_EXE_PATH", &java_exe_str),
+                    ("SONAR_SCANNER_PROXY_HOST", "https://proxy.bigcorp.com"),
+                    ("SONAR_SCANNER_PROXY_PORT", "666"),
+                    ("SONAR_SCANNER_PROXY_USER", "paul"),
+                    ("SONAR_SCANNER_PROXY_PASSWORD", "Paul123456"),
+                    ("SONAR_USER_HOME", format!("{home_dir}/.sonar-custom").as_str()),
+                    ("SONAR_SCANNER_JAVA_OPTS", "-Xmx1024m"),
+                    ("SONAR_SCANNER_WORK_DIR", ".custom-work-dir"),
+                    ("SONAR_VERBOSE", "true"),
+                    ("SONAR_LOG_LEVEL", "DEBUG"),
+                    ("SONAR_SCANNER_TRUSTSTORE_PATH", format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str()),
+                    ("SONAR_SCANNER_TRUSTSTORE_PASSWORD", "TruststorePassword"),
+                    ("SONAR_SCANNER_KEYSTORE_PATH", format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str()),
+                    ("SONAR_SCANNER_KEYSTORE_PASSWORD", "KeystorePassword"),
+                    ("SONAR_SOURCE_ENCODING", "UTF-8"),
+                    ("SONAR_SCANNER_INTERNAL_CLI_VERSION", "7.2.0.5079"),
+                    ("SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES", "true"),
+                ])?
+                .replace(&tmp_dir_str, "<tmp-dir>"),
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "https://sonarcloud.io",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "INFO",
-          "scanner_properties": {
-            "sonar.some.custom.prop": "hello"
+          "sonar_properties": {
+            "sonar.analysis.buildNumber": "42",
+            "sonar.host.url": "http://localhost:9000",
+            "sonar.java.binaries": "target/classes",
+            "sonar.java.libraries": "target/libs/*.jar",
+            "sonar.java.test.binaries": "target/test-classes",
+            "sonar.java.test.libraries": "target/libs/*.jar,target/test-libs/*.jar",
+            "sonar.log.level": "DEBUG",
+            "sonar.organization": "BigCorp",
+            "sonar.projectBaseDir": "<tmp-dir>/my-project",
+            "sonar.projectDescription": "Main Application",
+            "sonar.projectKey": "my-project-key",
+            "sonar.projectName": "My Project Name",
+            "sonar.projectVersion": "1.2.3",
+            "sonar.region": "us",
+            "sonar.scanner.apiBaseUrl": "http://localhost:9000",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.cli.version": "7.2.0.5079",
+            "sonar.scanner.internal.dump.properties": "true",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.javaExePath": "<tmp-dir>/jvm-25/jre/bin/java",
+            "sonar.scanner.javaOpts": "-Xmx1024m",
+            "sonar.scanner.keystorePassword": "KeystorePassword",
+            "sonar.scanner.keystorePath": "<user-home>/custom-keystore/ssl/keystore.p12",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.proxyHost": "https://proxy.bigcorp.com",
+            "sonar.scanner.proxyPassword": "Paul123456",
+            "sonar.scanner.proxyPort": "666",
+            "sonar.scanner.proxyUser": "paul",
+            "sonar.scanner.skipJreProvisioning": "true",
+            "sonar.scanner.sonarcloudUrl": "http://localhost:9000",
+            "sonar.scanner.truststorePassword": "TruststorePassword",
+            "sonar.scanner.truststorePath": "<user-home>/custom-truststore/ssl/truststore.p12",
+            "sonar.sourceEncoding": "UTF-8",
+            "sonar.sources": "src/main/java",
+            "sonar.tests": "src/test/java",
+            "sonar.token": "sqa_1234567890",
+            "sonar.userHome": "<user-home>/.sonar-custom",
+            "sonar.verbose": "true",
+            "sonar.working.directory": ".custom-work-dir"
           }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+        }"#}
+        );
+        tmp_dir.close().unwrap();
+        Ok(())
     }
 
     #[test]
-    fn parse_options_verbose_adds_property() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options = parse_options(&["--verbose".to_string()], &fixed_env).unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_options_unknown_arg_becomes_other_args() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/&[
+                    "--some-custom-prop=hello",
+                "--some-other-prop", "hello",
+                "-Dsonar.unknown.prop=123",
+                ],
+                /*env*/&[])?,
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "https://sonarcloud.io",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "verbose": true,
-          "log_level": "INFO",
-          "scanner_properties": {
-            "sonar.verbose": "true"
-          }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+          "sonar_properties": {
+            "sonar.host.url": "https://sonarcloud.io",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.scanner.apiBaseUrl": "https://api.sonarcloud.io",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.sonarcloudUrl": "https://sonarcloud.io",
+            "sonar.unknown.prop": "123",
+            "sonar.userHome": "<user-home>/.sonar"
+          },
+          "other_args": [
+            "--some-custom-prop=hello",
+            "--some-other-prop",
+            "hello"
+          ]
+        }"#}
+        );
+        Ok(())
     }
 
     #[test]
-    fn parse_options_skip_jre_provisioning() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options =
-            parse_options(&["--skip-jre-provisioning".to_string()], &fixed_env).unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_options_override_env_vars() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--token", "sqa_1234567890",
+                    "--url", "http://localhost:9000",
+                    "--org", "BigCorp",
+                    "--verbose=false",
+                ],
+                /*env*/&[
+                    ("SONAR_TOKEN", "sqa_6666666666"),
+                    ("SONAR_HOST_URL", "http://my.server.com:9000"),
+                    ("SONAR_ORGANIZATION", "DefaultCorp"),
+                    ("SONAR_VERBOSE", "true"),
+                ])?,
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "https://sonarcloud.io",
-          "os": "{os}",
-          "arch": "{arch}",
-          "skip_jre_provisioning": true,
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "INFO",
-          "scanner_properties": {
-            "sonar.scanner.skipJreProvisioning": "true"
+          "sonar_properties": {
+            "sonar.host.url": "http://localhost:9000",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.organization": "BigCorp",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.scanner.apiBaseUrl": "http://localhost:9000/api/v2",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "false",
+            "sonar.scanner.os"": "<os>",
+            "sonar.token": "sqa_1234567890",
+            "sonar.userHome": "<user-home>/.sonar",
+            "sonar.verbose": "false"
           }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+        }"#}
+        );
+        Ok(())
     }
 
     #[test]
-    fn parse_options_env_vars_override_defaults() {
-        let dir = cur_dir();
-        let os = default_os().unwrap();
-        let arch = default_arch().unwrap();
-        let options = parse_options(&[], &|k| match k {
-            "SONAR_HOST_URL" => Some("http://my-sonar:9000".to_string()),
-            "SONAR_TOKEN" => Some("envtoken".to_string()),
-            "HOME" => Some("/home/user".to_string()),
-            _ => None,
-        })
-        .unwrap();
-        assert_eq!(options.to_json(), indoc! {r#"
+    fn parse_no_region_custom_url_select_sonarqube_server() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--url", "https://server.com",
+                    "--org", "BigCorp",
+                ],
+                /*env*/&[])?,
+            indoc! {r#"
         {
-          "dir": "{dir}",
-          "url": "http://my-sonar:9000",
-          "token": "envtoken",
-          "os": "{os}",
-          "arch": "{arch}",
-          "sonar_home": "/home/user/.sonar",
-          "sonar_cache": "/home/user/.sonar/cache",
-          "work_dir": ".scannerwork",
-          "log_level": "INFO",
-          "scanner_properties": {
-            "sonar.host.url": "http://my-sonar:9000",
-            "sonar.token": "envtoken"
+          "sonar_properties": {
+            "sonar.host.url": "https://server.com",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.organization": "BigCorp",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.scanner.apiBaseUrl": "https://server.com/api/v2",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "false",
+            "sonar.scanner.os"": "<os>",
+            "sonar.userHome": "<user-home>/.sonar"
           }
-        }"#}.replace("{dir}", &dir).replace("{os}", &os).replace("{arch}", &arch));
+        }"#}
+        );
+        Ok(())
     }
 
     #[test]
-    fn to_json_omits_none_and_false_fields() {
-        let options = parse_options(
-            &["--dump".to_string(), "--token=secret".to_string()],
-            &fixed_env,
-        )
-        .unwrap();
-        assert!(options.dump);
-        let json = options.to_json();
-        assert!(json.contains("\"dir\""));
-        assert!(json.contains("\"url\""));
-        assert!(json.contains("\"token\": \"secret\""));
-        assert!(json.contains("\"os\""));
-        assert!(json.contains("\"arch\""));
-        assert!(json.contains("\"sonar_home\""));
-        assert!(json.contains("\"sonar_cache\""));
-        assert!(json.contains("\"work_dir\""));
-        assert!(json.contains("\"log_level\""));
-        assert!(!json.contains("\"key\""));
-        assert!(!json.contains("\"verbose\""));
-        assert!(!json.contains("\"skip_jre_provisioning\""));
+    fn parse_region_us() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--region", "us",
+                ],
+                /*env*/&[])?,
+            indoc! {r#"
+        {
+          "sonar_properties": {
+            "sonar.host.url": "https://sonarqube.us",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.region": "us",
+            "sonar.scanner.apiBaseUrl": "https://api.sonarqube.us",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.sonarcloudUrl": "https://sonarqube.us",
+            "sonar.userHome": "<user-home>/.sonar"
+          }
+        }"#}
+        );
+        Ok(())
     }
 
     #[test]
-    fn to_json_includes_scanner_properties_when_set() {
-        let options = parse_options(
-            &[
-                "--url=http://localhost:9000".to_string(),
-                "--token=tok".to_string(),
-            ],
-            &fixed_env,
-        )
-        .unwrap();
-        let json = options.to_json();
-        assert!(json.contains("\"scanner_properties\""));
-        assert!(json.contains("\"sonar.host.url\""));
-        assert!(json.contains("\"sonar.token\""));
+    fn parse_sonarcloud_dev_eu() -> Result<(), String> {
+        assert_eq!(
+            json_from_parse_options(
+                /*args*/            &[
+                    "--url", "https://dev5.sc-dev5.io",
+                ],
+                /*env*/&[])?,
+            indoc! {r#"
+        {
+          "sonar_properties": {
+            "sonar.host.url": "https://dev5.sc-dev5.io",
+            "sonar.java.binaries": "<user-home>/.sonar/cache/empty_directory",
+            "sonar.projectBaseDir": "<current-dir>",
+            "sonar.projectKey": "sonar-scan",
+            "sonar.projectName": "sonar-scan",
+            "sonar.region": "",
+            "sonar.scanner.apiBaseUrl": "https://api.sc-dev5.io",
+            "sonar.scanner.arch"": "<arch>",
+            "sonar.scanner.internal.isSonarCloud": "true",
+            "sonar.scanner.os"": "<os>",
+            "sonar.scanner.sonarcloudUrl": "https://dev5.sc-dev5.io",
+            "sonar.userHome": "<user-home>/.sonar"
+          }
+        }"#}
+        );
+        Ok(())
     }
 }
