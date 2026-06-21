@@ -4,16 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-pub const SONAR_PROJECT_KEY: &'static str = "sonar.projectKey";
-pub const SONAR_PROJECT_NAME: &'static str = "sonar.projectName";
-pub const SONAR_PROJECT_BASE_DIR: &'static str = "sonar.projectBaseDir";
-
-pub const SONAR_HOST_URL: &'static str = "sonar.host.url";
-pub const SONAR_SCANNER_SONARCLOUD_URL: &'static str = "sonar.scanner.sonarcloudUrl";
-pub const SONAR_SCANNER_API_BASE_URL: &'static str = "sonar.scanner.apiBaseUrl";
-
-pub const SONAR_TOKEN: &'static str = "sonar.token";
+use crate::props;
 
 struct OptDesc {
     option: &'static str,
@@ -23,49 +14,12 @@ struct OptDesc {
     usage: &'static str,
 }
 
-pub const SONAR_ORGANIZATION: &'static str = "sonar.organization";
-pub const SONAR_REGION: &'static str = "sonar.region";
-pub const SONAR_PROJECT_VERSION: &'static str = "sonar.projectVersion";
-pub const SONAR_PROJECT_DESCRIPTION: &'static str = "sonar.projectDescription";
-pub const SONAR_ANALYSIS_BUILD_NUMBER: &'static str = "sonar.analysis.buildNumber";
-pub const SONAR_SOURCES: &'static str = "sonar.sources";
-pub const SONAR_TESTS: &'static str = "sonar.tests";
-pub const SONAR_JAVA_BINARIES: &'static str = "sonar.java.binaries";
-pub const SONAR_JAVA_LIBRARIES: &'static str = "sonar.java.libraries";
-pub const SONAR_JAVA_TEST_BINARIES: &'static str = "sonar.java.test.binaries";
-pub const SONAR_JAVA_TEST_LIBRARIES: &'static str = "sonar.java.test.libraries";
-pub const SONAR_SCANNER_OS: &'static str = "sonar.scanner.os";
-pub const SONAR_SCANNER_ARCH: &'static str = "sonar.scanner.arch";
-pub const SONAR_SCANNER_SKIP_JRE_PROVISIONING: &'static str = "sonar.scanner.skipJreProvisioning";
-pub const SONAR_SCANNER_JAVA_EXE_PATH: &'static str = "sonar.scanner.javaExePath";
-pub const SONAR_SCANNER_PROXY_HOST: &'static str = "sonar.scanner.proxyHost";
-pub const SONAR_SCANNER_PROXY_PORT: &'static str = "sonar.scanner.proxyPort";
-pub const SONAR_SCANNER_PROXY_USER: &'static str = "sonar.scanner.proxyUser";
-pub const SONAR_SCANNER_PROXY_PASSWORD: &'static str = "sonar.scanner.proxyPassword";
-pub const SONAR_USER_HOME: &'static str = "sonar.userHome";
-pub const SONAR_SCANNER_JAVA_OPTS: &'static str = "sonar.scanner.javaOpts";
-pub const SONAR_WORKING_DIRECTORY: &'static str = "sonar.working.directory";
-pub const SONAR_VERBOSE: &'static str = "sonar.verbose";
-pub const SONAR_LOG_LEVEL: &'static str = "sonar.log.level";
-pub const SONAR_SCANNER_TRUSTSTORE_PATH: &'static str = "sonar.scanner.truststorePath";
-pub const SONAR_SCANNER_TRUSTSTORE_PASSWORD: &'static str = "sonar.scanner.truststorePassword";
-pub const SONAR_SCANNER_KEYSTORE_PATH: &'static str = "sonar.scanner.keystorePath";
-pub const SONAR_SCANNER_KEYSTORE_PASSWORD: &'static str = "sonar.scanner.keystorePassword";
-pub const SONAR_SOURCE_ENCODING: &'static str = "sonar.sourceEncoding";
-pub const SONAR_SCANNER_INTERNAL_CLI_VERSION: &'static str = "sonar.scanner.internal.cli.version";
-pub const SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES: &'static str =
-    "sonar.scanner.internal.dump.properties";
-
-// Options not parsed but computed
-pub const SONAR_SCANNER_INTERNAL_IS_SONARCLOUD: &'static str =
-    "sonar.scanner.internal.isSonarCloud";
-
 const OPTIONS: &'static [OptDesc] = &[
     OptDesc {
         option: "token",
         bool_flag: false,
         env: "SONAR_TOKEN",
-        property: SONAR_TOKEN,
+        property: props::TOKEN,
         usage: r##"
     --token=<TOKEN>               Token used by the scanner to authenticate to your SonarQube
                                   instance. This property has no default value and is mandatory.
@@ -75,7 +29,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "dir",
         bool_flag: false,
         env: "SONAR_BASE_DIR",
-        property: SONAR_PROJECT_BASE_DIR,
+        property: props::PROJECT_BASE_DIR,
         usage: r##"
     --dir=<PATH>                  The project's base directory. Use this property when you need the
                                   analysis to take place in a directory other than the one from
@@ -87,7 +41,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "url",
         bool_flag: false,
         env: "SONAR_HOST_URL",
-        property: SONAR_HOST_URL,
+        property: props::HOST_URL,
         usage: r##"
     --url=<URL>                   The URL to your SonarQube instance.
                    Default value: https://sonarcloud.io
@@ -97,7 +51,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "org",
         bool_flag: false,
         env: "SONAR_ORGANIZATION",
-        property: SONAR_ORGANIZATION,
+        property: props::ORGANIZATION,
         usage: r##"
     --org=<URL>                   (Only for SonarQube Cloud) The project organization.
                    Default value: <Organization of the given token if there is only one>
@@ -107,7 +61,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "region",
         bool_flag: false,
         env: "SONAR_REGION",
-        property: SONAR_REGION,
+        property: props::REGION,
         usage: r##"
     --region=<URL>                (Only for SonarQube Cloud) The SonarQube Cloud region:
                                   Possible values: 'us', missing or emtpy.
@@ -120,7 +74,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "key",
         bool_flag: false,
         env: "SONAR_PROJECT_KEY",
-        property: SONAR_PROJECT_KEY,
+        property: props::PROJECT_KEY,
         usage: r##"
     --key=<KEY>                   The project's unique key. Can include up to 400 characters. All
                                   letters, digits, dashes, underscores, periods, and colons are
@@ -132,7 +86,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "name",
         bool_flag: false,
         env: "SONAR_PROJECT_NAME",
-        property: SONAR_PROJECT_NAME,
+        property: props::PROJECT_NAME,
         usage: r##"
     --name=<NAME>                 Name of the project that will be displayed on the web interface.
                    Default value: <value of sonar.projectKey>
@@ -142,7 +96,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "version",
         bool_flag: false,
         env: "SONAR_PROJECT_VERSION",
-        property: SONAR_PROJECT_VERSION,
+        property: props::PROJECT_VERSION,
         usage: r##"
     --version=<VERSION>           The project version. It should be set for branch analysis in case
                                   you use the new code definition based on the previous version.
@@ -153,7 +107,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "description",
         bool_flag: false,
         env: "SONAR_PROJECT_DESCRIPTION",
-        property: SONAR_PROJECT_DESCRIPTION,
+        property: props::PROJECT_DESCRIPTION,
         usage: r##"
     --description=<TEXT>          The project description.
                    Default value: <empty>
@@ -163,7 +117,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "build-number",
         bool_flag: false,
         env: "SONAR_PROJECT_BUILD_NUMBER",
-        property: SONAR_ANALYSIS_BUILD_NUMBER,
+        property: props::BUILD_NUMBER,
         usage: r##"
     --build-number=<NUMBER>       The project build number.
                    Default value: <empty>
@@ -173,7 +127,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "sources",
         bool_flag: false,
         env: "SONAR_PROJECT_SOURCES",
-        property: SONAR_SOURCES,
+        property: props::SOURCES,
         usage: r##"
     --sources=<PATHS>             The initial analysis scope for main source code (non-test code) in
                                   the project. Comma-separated paths to directories are included. An
@@ -189,7 +143,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "tests",
         bool_flag: false,
         env: "SONAR_PROJECT_TESTS",
-        property: SONAR_TESTS,
+        property: props::TESTS,
         usage: r##"
     --tests=<PATHS>               The initial analysis scope for test code in the project.
                                   Same format as '--sources'.
@@ -200,7 +154,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-binaries",
         bool_flag: false,
         env: "SONAR_JAVA_BINARIES",
-        property: SONAR_JAVA_BINARIES,
+        property: props::JAVA_BINARIES,
         usage: r##"
     ----java-binaries=<PATHS>     Comma-separated paths to directories containing the compiled
                                   bytecode files corresponding to your source files.
@@ -211,7 +165,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-libraries",
         bool_flag: false,
         env: "SONAR_JAVA_LIBRARIES",
-        property: SONAR_JAVA_LIBRARIES,
+        property: props::JAVA_LIBRARIES,
         usage: r##"
     ----java-libraries=<PATHS>    Comma-separated paths to files with third-party libraries (JAR or
                                   Zip files) used by your project.
@@ -224,7 +178,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-test-binaries",
         bool_flag: false,
         env: "SONAR_JAVA_TEST_BINARIES",
-        property: SONAR_JAVA_TEST_BINARIES,
+        property: props::JAVA_TEST_BINARIES,
         usage: r##"
     --java-test-binaries=<PATHS>  Comma-separated paths to directories containing the compiled
                                   bytecode files corresponding to your test files.
@@ -235,7 +189,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-test-libraries",
         bool_flag: false,
         env: "SONAR_JAVA_TEST_LIBRARIES",
-        property: SONAR_JAVA_TEST_LIBRARIES,
+        property: props::JAVA_TEST_LIBRARIES,
         usage: r##"
     --java-test-libraries=<PATHS> Comma-separated paths to files with third-party libraries (JAR or
                                   Zip files) used by your tests. (For example, this should include
@@ -248,7 +202,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "os",
         bool_flag: false,
         env: "SONAR_SCANNER_OS",
-        property: SONAR_SCANNER_OS,
+        property: props::OS,
         usage: r##"
     --os=<OS>                     The operating system of the machine hosting the SonarScanner.
                                   Possible values: windows, linux, macos (or Darwin), alpine
@@ -259,7 +213,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "arch",
         bool_flag: false,
         env: "SONAR_SCANNER_ARCH",
-        property: SONAR_SCANNER_ARCH,
+        property: props::ARCH,
         usage: r##"
     --arch=<ARCH>                 The CPU architecture type.
                                   Possible values: x64 (or x86_64, amd64), aarch64 (or arm64)
@@ -270,7 +224,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "skip-jre-provisioning",
         bool_flag: true,
         env: "SONAR_SCANNER_SKIP_JRE_PROVISIONING",
-        property: SONAR_SCANNER_SKIP_JRE_PROVISIONING,
+        property: props::SKIP_JRE_PROVISIONING,
         usage: r##"
     --skip-jre-provisioning       Skip the Java Runtime Environment (JRE) download from the
                                   SonarQube instance.
@@ -281,7 +235,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-exe-path",
         bool_flag: false,
         env: "SONAR_SCANNER_JAVA_EXE_PATH",
-        property: SONAR_SCANNER_JAVA_EXE_PATH,
+        property: props::JAVA_EXE_PATH,
         usage: r##"
     --java-exe-path=<PATH>        If defined, the SonarScanner runs with this Java executable.
                    Default value: <bin/java of the provisioned or autodetected JRE>
@@ -291,7 +245,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "proxy-host",
         bool_flag: false,
         env: "SONAR_SCANNER_PROXY_HOST",
-        property: SONAR_SCANNER_PROXY_HOST,
+        property: props::PROXY_HOST,
         usage: r##"
     --proxy-host=<HOST>           The host name of the proxy server.
                    Default value: <empty>
@@ -301,7 +255,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "proxy-port",
         bool_flag: false,
         env: "SONAR_SCANNER_PROXY_PORT",
-        property: SONAR_SCANNER_PROXY_PORT,
+        property: props::PROXY_PORT,
         usage: r##"
     --proxy-port=<PORT>           The port of the proxy server.
                    Default value: <same port as sonar.host.url>
@@ -311,7 +265,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "proxy-user",
         bool_flag: false,
         env: "SONAR_SCANNER_PROXY_USER",
-        property: SONAR_SCANNER_PROXY_USER,
+        property: props::PROXY_USER,
         usage: r##"
     --proxy-user=<USER>           In case of an authenticated proxy: the user name.
                    Default value: <empty>
@@ -321,7 +275,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "proxy-password",
         bool_flag: false,
         env: "SONAR_SCANNER_PROXY_PASSWORD",
-        property: SONAR_SCANNER_PROXY_PASSWORD,
+        property: props::PROXY_PASSWORD,
         usage: r##"
     --proxy-password=<PASSWORD>   In case of an authenticated proxy: the user password.
                    Default value: <empty>
@@ -331,7 +285,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "sonar-home",
         bool_flag: false,
         env: "SONAR_USER_HOME",
-        property: SONAR_USER_HOME,
+        property: props::SONAR_HOME,
         usage: r##"
     --sonar-home=<PATH>           The directory for the scanner cache.
                    Default value: ${HOME}/.sonar
@@ -341,7 +295,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "java-opts",
         bool_flag: false,
         env: "SONAR_SCANNER_JAVA_OPTS",
-        property: SONAR_SCANNER_JAVA_OPTS,
+        property: props::JAVA_OPTS,
         usage: r##"
     --java-opts=<OPTS>            Arguments to pass to the JVM running the scanner engine.
                    Default value: <empty>
@@ -351,7 +305,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "work-dir",
         bool_flag: false,
         env: "SONAR_SCANNER_WORK_DIR",
-        property: SONAR_WORKING_DIRECTORY,
+        property: props::WORKING_DIR,
         usage: r##"
     --work-dir=<DIR>              Path to the working directory used by the SonarScanner during a
                                   project analysis to store temporary data. The path can be relative
@@ -363,7 +317,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "verbose",
         bool_flag: true,
         env: "SONAR_VERBOSE",
-        property: SONAR_VERBOSE,
+        property: props::VERBOSE,
         usage: r##"
     --verbose                     When present, adds more details to the analysis logs by activating
                                   the DEBUG mode for the scanner.
@@ -374,7 +328,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "log",
         bool_flag: false,
         env: "SONAR_LOG_LEVEL",
-        property: SONAR_LOG_LEVEL,
+        property: props::LOG_LEVEL,
         usage: r##"
     --log=<LEVEL>                 The log level.
                                   Possible values: INFO, DEBUG, TRACE
@@ -385,7 +339,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "truststore-path",
         bool_flag: false,
         env: "SONAR_SCANNER_TRUSTSTORE_PATH",
-        property: SONAR_SCANNER_TRUSTSTORE_PATH,
+        property: props::TRUSTSTORE_PATH,
         usage: r##"
     --truststore-path=<PATH>      The path to the truststore file.
                    Default value: <sonar.userHome>/ssl/truststore.p12
@@ -395,7 +349,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "truststore-password",
         bool_flag: false,
         env: "SONAR_SCANNER_TRUSTSTORE_PASSWORD",
-        property: SONAR_SCANNER_TRUSTSTORE_PASSWORD,
+        property: props::TRUSTSTORE_PASSWORD,
         usage: r##"
     --truststore-password=<PASS>  The password of the truststore.
                    Default value: changeit
@@ -405,7 +359,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "keystore-path",
         bool_flag: false,
         env: "SONAR_SCANNER_KEYSTORE_PATH",
-        property: SONAR_SCANNER_KEYSTORE_PATH,
+        property: props::KEYSTORE_PATH,
         usage: r##"
     --keystore-path=<PATH>        The path to the keystore file.
                    Default value: <sonar.userHome>/ssl/keystore.p12
@@ -415,7 +369,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "keystore-password",
         bool_flag: false,
         env: "SONAR_SCANNER_KEYSTORE_PASSWORD",
-        property: SONAR_SCANNER_KEYSTORE_PASSWORD,
+        property: props::KEYSTORE_PASSWORD,
         usage: r##"
     --keystore-password=<PASS>    The password of the keystore file.
                    Default value: sonar
@@ -425,7 +379,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "encoding",
         bool_flag: false,
         env: "SONAR_SOURCE_ENCODING",
-        property: SONAR_SOURCE_ENCODING,
+        property: props::SOURCE_ENCODING,
         usage: r##"
     --encoding=<ENCODING>         Encoding of the source files.
                    Default value: <system encoding>
@@ -435,7 +389,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "scanner-cli-version",
         bool_flag: false,
         env: "SONAR_SCANNER_INTERNAL_CLI_VERSION",
-        property: SONAR_SCANNER_INTERNAL_CLI_VERSION,
+        property: props::CLI_VERSION,
         usage: r##"
     --scanner-cli-version=<VER>   Force the analysis to download this version of the scanner from
                                   binaries.sonarsource.com instead of using the one provided by the
@@ -447,7 +401,7 @@ const OPTIONS: &'static [OptDesc] = &[
         option: "dump",
         bool_flag: true,
         env: "SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES",
-        property: SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES,
+        property: props::DUMP_PROPERTIES,
         usage: r##"
     --dump                        Print all resolved options as JSON and exit.
                    Default value: false
@@ -519,13 +473,13 @@ impl LogLevel {
             "DEBUG" => Ok(LogLevel::DEBUG),
             "TRACE" => Ok(LogLevel::TRACE),
             _ => Err(format!(
-                "Invalid '{SONAR_LOG_LEVEL}' value '{s}', expected 'INFO', 'DEBUG' or 'TRACE'."
+                "Invalid '{}' value '{s}', expected 'INFO', 'DEBUG' or 'TRACE'.", props::LOG_LEVEL
             )),
         }
     }
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Serialize)]
 pub struct ScannerOptions {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub sonar_properties: BTreeMap<String, String>,
@@ -535,11 +489,11 @@ pub struct ScannerOptions {
 
 impl ScannerOptions {
     pub fn project_base_directory(&self) -> Result<PathBuf, String> {
-        self.required_path(SONAR_PROJECT_BASE_DIR)
+        self.required_path(props::PROJECT_BASE_DIR)
     }
 
     pub fn log_level(&self) -> LogLevel {
-        if let Some(level) = self.optional(SONAR_LOG_LEVEL) {
+        if let Some(level) = self.optional(props::LOG_LEVEL) {
             LogLevel::parse(level).unwrap_or_else(|_| LogLevel::INFO)
         } else {
             LogLevel::INFO
@@ -552,7 +506,7 @@ impl ScannerOptions {
     }
 
     pub fn sonar_home(&self) -> Result<PathBuf, String> {
-        Ok(PathBuf::from(self.required(SONAR_USER_HOME)?))
+        Ok(PathBuf::from(self.required(props::SONAR_HOME)?))
     }
 
     pub fn sonar_cache(&self) -> Result<PathBuf, String> {
@@ -776,12 +730,12 @@ mod tests {
     }
 
     fn json_from_parse_options(args: &[&str], env: &[(&str, &str)]) -> Result<String, String> {
-        let string_args: &[String] = &args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        let string_args: Vec<String> = args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
         let env_map: HashMap<&str, &str> = env.iter().copied().collect();
         let env_closure = |key: &str| -> Option<String> {
             env_map.get(key).map(|val| val.to_string())
         };
-        let options = parse_options(string_args, &env_closure)?;
+        let options = parse_options(&string_args, &env_closure)?;
         let mut json = options.to_json()
             .replace(&cur_dir(), "<current-dir>")
             .replace(&user_dir(), "<user-home>");

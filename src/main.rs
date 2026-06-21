@@ -1,17 +1,17 @@
 mod options;
 mod resolve;
 mod sonar_scanner_cli;
+mod props;
 
-use options::{ScannerOptions, usage, parse_options};
+use options::{parse_options, usage, ScannerOptions};
 use sonar_scanner_cli::{download_jre_extract_scanner, download_scanner};
 #[cfg(not(test))]
-use chrono::{Local};
+use chrono::Local;
 #[cfg(test)]
 use chrono::{Local, TimeZone};
 use std::env;
 use std::io::{self, Write};
 use std::process::{self, Command, Stdio};
-use crate::options::{SONAR_PROJECT_BASE_DIR, SONAR_SCANNER_INTERNAL_CLI_VERSION, SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES, SONAR_TOKEN};
 use crate::sonar_scanner_cli::SONAR_SCANNER_CLI_JAR_VERSION;
 
 fn log(out: &mut impl Write, message: &str) {
@@ -32,7 +32,7 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
         .map(|(k, v)| format!("-D{k}={v}"))
         .collect();
 
-    let status = if let Some(scanner_version) = options.optional(SONAR_SCANNER_INTERNAL_CLI_VERSION) {
+    let status = if let Some(scanner_version) = options.optional(props::CLI_VERSION) {
         log(out, &format!("INFO  Using SonarScanner CLI: {}", &scanner_version));
         let sonar_scanner = download_scanner(options, out)?;
         if options.show_debug_log() {
@@ -56,7 +56,7 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
             log(out, &format!("DEBUG  java      : {}", paths.java_exe.display()));
             log(out, &format!("DEBUG  jar       : {}", paths.sonar_scanner_jar.display()));
         }
-        let project_home = options.required(SONAR_PROJECT_BASE_DIR)?;
+        let project_home = options.required(props::PROJECT_BASE_DIR)?;
         let mut cmd = Command::new(&paths.java_exe);
         cmd
             .arg("-Djava.awt.headless=true")
@@ -108,12 +108,12 @@ fn scan(
         }
     };
 
-    if options.is_true(SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES) {
+    if options.is_true(props::DUMP_PROPERTIES) {
         writeln!(out, "{}", options.to_json()).ok();
         return 0;
     }
 
-    if options.sonar_properties.get(SONAR_TOKEN).is_none() {
+    if options.sonar_properties.get(props::TOKEN).is_none() {
         log(err, "ERROR  Missing required option: --token or -Dsonar.token= or environment variable: SONAR_TOKEN");
         return 1;
     }
