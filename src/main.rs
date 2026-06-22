@@ -1,7 +1,6 @@
 mod options;
 mod resolve;
 mod sonar_scanner_cli;
-mod props;
 
 use options::{parse_options, usage, ScannerOptions};
 use sonar_scanner_cli::{download_jre_extract_scanner, download_scanner};
@@ -32,7 +31,7 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
         .map(|(k, v)| format!("-D{k}={v}"))
         .collect();
 
-    let status = if let Some(scanner_version) = options.optional(props::CLI_VERSION) {
+    let status = if let Some(scanner_version) = options.get(options::CLI_VERSION) {
         log(out, &format!("INFO  Using SonarScanner CLI: {}", &scanner_version));
         let sonar_scanner = download_scanner(options, out)?;
         if options.show_debug_log() {
@@ -56,7 +55,7 @@ fn scan_project(options: &ScannerOptions, out: &mut impl Write) -> Result<i32, S
             log(out, &format!("DEBUG  java      : {}", paths.java_exe.display()));
             log(out, &format!("DEBUG  jar       : {}", paths.sonar_scanner_jar.display()));
         }
-        let project_home = options.required(props::PROJECT_BASE_DIR)?;
+        let project_home = options.required(options::PROJECT_BASE_DIR)?;
         let mut cmd = Command::new(&paths.java_exe);
         cmd
             .arg("-Djava.awt.headless=true")
@@ -108,12 +107,12 @@ fn scan(
         }
     };
 
-    if options.is_true(props::DUMP_PROPERTIES) {
+    if options.is_true(options::DUMP_PROPERTIES) {
         writeln!(out, "{}", options.to_json()).ok();
         return 0;
     }
 
-    if options.sonar_properties.get(props::TOKEN).is_none() {
+    if options.get(options::TOKEN).is_none() {
         log(err, "ERROR  Missing required option: --token or -Dsonar.token= or environment variable: SONAR_TOKEN");
         return 1;
     }

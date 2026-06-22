@@ -4,131 +4,198 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
-use crate::props;
 
-struct OptDesc {
-    option: &'static str,
-    bool_flag: bool,
-    env: &'static str,
-    property: &'static str,
-    usage: &'static str,
-}
+// Options not parsed but computed
+pub const IS_SONARCLOUD: &'static str = "sonar.scanner.internal.isSonarCloud";
 
-const OPTIONS: &'static [OptDesc] = &[
-    OptDesc {
-        option: "token",
-        bool_flag: false,
-        env: "SONAR_TOKEN",
-        property: props::TOKEN,
-        usage: r##"
+pub const OPTIONS: &'static [&OptDesc] = &[
+    TOKEN,
+    PROJECT_BASE_DIR,
+    HOST_URL,
+    SONARCLOUD_URL,
+    API_BASE_URL,
+    ORGANIZATION,
+    REGION,
+    PROJECT_KEY,
+    PROJECT_NAME,
+    PROJECT_VERSION,
+    PROJECT_DESCRIPTION,
+    BUILD_NUMBER,
+    SOURCES,
+    TESTS,
+    JAVA_BINARIES,
+    JAVA_LIBRARIES,
+    JAVA_TEST_BINARIES,
+    JAVA_TEST_LIBRARIES,
+    OS,
+    ARCH,
+    SKIP_JRE_PROVISIONING,
+    JAVA_EXE_PATH,
+    PROXY_HOST,
+    PROXY_PORT,
+    PROXY_USER,
+    PROXY_PASSWORD,
+    SONAR_HOME,
+    JAVA_OPTS,
+    WORKING_DIR,
+    VERBOSE,
+    LOG_LEVEL,
+    TRUSTSTORE_PATH,
+    TRUSTSTORE_PASSWORD,
+    KEYSTORE_PATH,
+    KEYSTORE_PASSWORD,
+    SOURCE_ENCODING,
+    CLI_VERSION,
+    DUMP_PROPERTIES,
+];
+
+pub const TOKEN: &'static OptDesc = &OptDesc {
+    option: "token",
+    bool_flag: false,
+    env: "SONAR_TOKEN",
+    property: "sonar.token",
+    usage: r##"
     --token=<TOKEN>               Token used by the scanner to authenticate to your SonarQube
                                   instance. This property has no default value and is mandatory.
 "##,
-    },
-    OptDesc {
-        option: "dir",
-        bool_flag: false,
-        env: "SONAR_BASE_DIR",
-        property: props::PROJECT_BASE_DIR,
-        usage: r##"
+};
+
+pub const PROJECT_BASE_DIR: &'static OptDesc = &OptDesc {
+    option: "dir",
+    bool_flag: false,
+    env: "SONAR_BASE_DIR",
+    property: "sonar.projectBaseDir",
+    usage: r##"
     --dir=<PATH>                  The project's base directory. Use this property when you need the
                                   analysis to take place in a directory other than the one from
                                   which it was started.
                    Default value: <current directory>
 "##,
-    },
-    OptDesc {
-        option: "url",
-        bool_flag: false,
-        env: "SONAR_HOST_URL",
-        property: props::HOST_URL,
-        usage: r##"
+};
+
+pub const HOST_URL: &'static OptDesc = &OptDesc {
+    option: "url",
+    bool_flag: false,
+    env: "SONAR_HOST_URL",
+    property: "sonar.host.url",
+    usage: r##"
     --url=<URL>                   The URL to your SonarQube instance.
                    Default value: https://sonarcloud.io
 "##,
-    },
-    OptDesc {
-        option: "org",
-        bool_flag: false,
-        env: "SONAR_ORGANIZATION",
-        property: props::ORGANIZATION,
-        usage: r##"
+};
+
+pub const SONARCLOUD_URL: &'static OptDesc = &OptDesc {
+    option: "sonarcloud-url",
+    bool_flag: false,
+    env: "SONAR_CLOUD_URL",
+    property: "sonar.scanner.sonarcloudUrl",
+    usage: r##"
+    --sonarcloud-url=<URL>        The URL to your SonarQube Cloud instance.
+                                  (alias for 'sonar.host.url' in the context of SonarQube Cloud)
+                   Default value: https://sonarcloud.io
+"##,
+};
+
+pub const API_BASE_URL: &'static OptDesc = &OptDesc {
+    option: "api-url",
+    bool_flag: false,
+    env: "SONAR_API_BASE_URL",
+    property: "sonar.scanner.apiBaseUrl",
+    usage: r##"
+    --api-url=<URL>               The URL to the web API of your SonarQube Cloud instance.
+                   Default value: <automatically computed based on your region>
+"##,
+};
+
+pub const ORGANIZATION: &'static OptDesc = &OptDesc {
+    option: "org",
+    bool_flag: false,
+    env: "SONAR_ORGANIZATION",
+    property: "sonar.organization",
+    usage: r##"
     --org=<URL>                   (Only for SonarQube Cloud) The project organization.
                    Default value: <Organization of the given token if there is only one>
 "##,
-    },
-    OptDesc {
-        option: "region",
-        bool_flag: false,
-        env: "SONAR_REGION",
-        property: props::REGION,
-        usage: r##"
+};
+
+pub const REGION: &'static OptDesc = &OptDesc {
+    option: "region",
+    bool_flag: false,
+    env: "SONAR_REGION",
+    property: "sonar.region",
+    usage: r##"
     --region=<URL>                (Only for SonarQube Cloud) The SonarQube Cloud region:
                                   Possible values: 'us', missing or emtpy.
                                   * 'us' region set 'sonar.host.url' to 'https://sonarqube.us'
                                   * missing or emtpy set 'sonar.host.url' to 'https://sonarcloud.io'
                    Default value: <emtpy>
 "##,
-    },
-    OptDesc {
-        option: "key",
-        bool_flag: false,
-        env: "SONAR_PROJECT_KEY",
-        property: props::PROJECT_KEY,
-        usage: r##"
+};
+
+pub const PROJECT_KEY: &'static OptDesc = &OptDesc {
+    option: "key",
+    bool_flag: false,
+    env: "SONAR_PROJECT_KEY",
+    property: "sonar.projectKey",
+    usage: r##"
     --key=<KEY>                   The project's unique key. Can include up to 400 characters. All
                                   letters, digits, dashes, underscores, periods, and colons are
                                   accepted.
                    Default value: <git repository name or base directory name>
 "##,
-    },
-    OptDesc {
-        option: "name",
-        bool_flag: false,
-        env: "SONAR_PROJECT_NAME",
-        property: props::PROJECT_NAME,
-        usage: r##"
+};
+
+pub const PROJECT_NAME: &'static OptDesc = &OptDesc {
+    option: "name",
+    bool_flag: false,
+    env: "SONAR_PROJECT_NAME",
+    property: "sonar.projectName",
+    usage: r##"
     --name=<NAME>                 Name of the project that will be displayed on the web interface.
                    Default value: <value of sonar.projectKey>
 "##,
-    },
-    OptDesc {
-        option: "version",
-        bool_flag: false,
-        env: "SONAR_PROJECT_VERSION",
-        property: props::PROJECT_VERSION,
-        usage: r##"
+};
+
+pub const PROJECT_VERSION: &'static OptDesc = &OptDesc {
+    option: "version",
+    bool_flag: false,
+    env: "SONAR_PROJECT_VERSION",
+    property: "sonar.projectVersion",
+    usage: r##"
     --version=<VERSION>           The project version. It should be set for branch analysis in case
                                   you use the new code definition based on the previous version.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "description",
-        bool_flag: false,
-        env: "SONAR_PROJECT_DESCRIPTION",
-        property: props::PROJECT_DESCRIPTION,
-        usage: r##"
+};
+
+pub const PROJECT_DESCRIPTION: &'static OptDesc = &OptDesc {
+    option: "description",
+    bool_flag: false,
+    env: "SONAR_PROJECT_DESCRIPTION",
+    property: "sonar.projectDescription",
+    usage: r##"
     --description=<TEXT>          The project description.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "build-number",
-        bool_flag: false,
-        env: "SONAR_PROJECT_BUILD_NUMBER",
-        property: props::BUILD_NUMBER,
-        usage: r##"
+};
+
+pub const BUILD_NUMBER: &'static OptDesc = &OptDesc {
+    option: "build-number",
+    bool_flag: false,
+    env: "SONAR_PROJECT_BUILD_NUMBER",
+    property: "sonar.analysis.buildNumber",
+    usage: r##"
     --build-number=<NUMBER>       The project build number.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "sources",
-        bool_flag: false,
-        env: "SONAR_PROJECT_SOURCES",
-        property: props::SOURCES,
-        usage: r##"
+};
+
+pub const SOURCES: &'static OptDesc = &OptDesc {
+    option: "sources",
+    bool_flag: false,
+    env: "SONAR_PROJECT_SOURCES",
+    property: "sonar.sources",
+    usage: r##"
     --sources=<PATHS>             The initial analysis scope for main source code (non-test code) in
                                   the project. Comma-separated paths to directories are included. An
                                   individual file in the list means that the file is included. A
@@ -138,276 +205,300 @@ const OPTIONS: &'static [OptDesc] = &[
                                   Wildcards (*, ** and ?) are not allowed.
                    Default value: <value of sonar.projectBaseDir>
 "##,
-    },
-    OptDesc {
-        option: "tests",
-        bool_flag: false,
-        env: "SONAR_PROJECT_TESTS",
-        property: props::TESTS,
-        usage: r##"
+};
+
+pub const TESTS: &'static OptDesc = &OptDesc {
+    option: "tests",
+    bool_flag: false,
+    env: "SONAR_PROJECT_TESTS",
+    property: "sonar.tests",
+    usage: r##"
     --tests=<PATHS>               The initial analysis scope for test code in the project.
                                   Same format as '--sources'.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "java-binaries",
-        bool_flag: false,
-        env: "SONAR_JAVA_BINARIES",
-        property: props::JAVA_BINARIES,
-        usage: r##"
+};
+
+pub const JAVA_BINARIES: &'static OptDesc = &OptDesc {
+    option: "java-binaries",
+    bool_flag: false,
+    env: "SONAR_JAVA_BINARIES",
+    property: "sonar.java.binaries",
+    usage: r##"
     ----java-binaries=<PATHS>     Comma-separated paths to directories containing the compiled
                                   bytecode files corresponding to your source files.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "java-libraries",
-        bool_flag: false,
-        env: "SONAR_JAVA_LIBRARIES",
-        property: props::JAVA_LIBRARIES,
-        usage: r##"
+};
+
+pub const JAVA_LIBRARIES: &'static OptDesc = &OptDesc {
+    option: "java-libraries",
+    bool_flag: false,
+    env: "SONAR_JAVA_LIBRARIES",
+    property: "sonar.java.libraries",
+    usage: r##"
     ----java-libraries=<PATHS>    Comma-separated paths to files with third-party libraries (JAR or
                                   Zip files) used by your project.
                                   Wildcards can be used:
                                   sonar.java.libraries=path/to/Library.jar,directory/**/*.jar
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "java-test-binaries",
-        bool_flag: false,
-        env: "SONAR_JAVA_TEST_BINARIES",
-        property: props::JAVA_TEST_BINARIES,
-        usage: r##"
+};
+
+pub const JAVA_TEST_BINARIES: &'static OptDesc = &OptDesc {
+    option: "java-test-binaries",
+    bool_flag: false,
+    env: "SONAR_JAVA_TEST_BINARIES",
+    property: "sonar.java.test.binaries",
+    usage: r##"
     --java-test-binaries=<PATHS>  Comma-separated paths to directories containing the compiled
                                   bytecode files corresponding to your test files.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "java-test-libraries",
-        bool_flag: false,
-        env: "SONAR_JAVA_TEST_LIBRARIES",
-        property: props::JAVA_TEST_LIBRARIES,
-        usage: r##"
+};
+
+pub const JAVA_TEST_LIBRARIES: &'static OptDesc = &OptDesc {
+    option: "java-test-libraries",
+    bool_flag: false,
+    env: "SONAR_JAVA_TEST_LIBRARIES",
+    property: "sonar.java.test.libraries",
+    usage: r##"
     --java-test-libraries=<PATHS> Comma-separated paths to files with third-party libraries (JAR or
                                   Zip files) used by your tests. (For example, this should include
                                   the junit jar). Wildcards can be used:
                                   sonar.java.test.libraries=directory/**/*.jar
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "os",
-        bool_flag: false,
-        env: "SONAR_SCANNER_OS",
-        property: props::OS,
-        usage: r##"
+};
+
+pub const OS: &'static OptDesc = &OptDesc {
+    option: "os",
+    bool_flag: false,
+    env: "SONAR_SCANNER_OS",
+    property: "sonar.scanner.os",
+    usage: r##"
     --os=<OS>                     The operating system of the machine hosting the SonarScanner.
                                   Possible values: windows, linux, macos (or Darwin), alpine
                    Default value: <autodetected value>
 "##,
-    },
-    OptDesc {
-        option: "arch",
-        bool_flag: false,
-        env: "SONAR_SCANNER_ARCH",
-        property: props::ARCH,
-        usage: r##"
+};
+
+pub const ARCH: &'static OptDesc = &OptDesc {
+    option: "arch",
+    bool_flag: false,
+    env: "SONAR_SCANNER_ARCH",
+    property: "sonar.scanner.arch",
+    usage: r##"
     --arch=<ARCH>                 The CPU architecture type.
                                   Possible values: x64 (or x86_64, amd64), aarch64 (or arm64)
                    Default value: <autodetected value>
 "##,
-    },
-    OptDesc {
-        option: "skip-jre-provisioning",
-        bool_flag: true,
-        env: "SONAR_SCANNER_SKIP_JRE_PROVISIONING",
-        property: props::SKIP_JRE_PROVISIONING,
-        usage: r##"
+};
+
+pub const SKIP_JRE_PROVISIONING: &'static OptDesc = &OptDesc {
+    option: "skip-jre-provisioning",
+    bool_flag: true,
+    env: "SONAR_SCANNER_SKIP_JRE_PROVISIONING",
+    property: "sonar.scanner.skipJreProvisioning",
+    usage: r##"
     --skip-jre-provisioning       Skip the Java Runtime Environment (JRE) download from the
                                   SonarQube instance.
                    Default value: false
 "##,
-    },
-    OptDesc {
-        option: "java-exe-path",
-        bool_flag: false,
-        env: "SONAR_SCANNER_JAVA_EXE_PATH",
-        property: props::JAVA_EXE_PATH,
-        usage: r##"
+};
+
+pub const JAVA_EXE_PATH: &'static OptDesc = &OptDesc {
+    option: "java-exe-path",
+    bool_flag: false,
+    env: "SONAR_SCANNER_JAVA_EXE_PATH",
+    property: "sonar.scanner.javaExePath",
+    usage: r##"
     --java-exe-path=<PATH>        If defined, the SonarScanner runs with this Java executable.
                    Default value: <bin/java of the provisioned or autodetected JRE>
 "##,
-    },
-    OptDesc {
-        option: "proxy-host",
-        bool_flag: false,
-        env: "SONAR_SCANNER_PROXY_HOST",
-        property: props::PROXY_HOST,
-        usage: r##"
+};
+
+pub const PROXY_HOST: &'static OptDesc = &OptDesc {
+    option: "proxy-host",
+    bool_flag: false,
+    env: "SONAR_SCANNER_PROXY_HOST",
+    property: "sonar.scanner.proxyHost",
+    usage: r##"
     --proxy-host=<HOST>           The host name of the proxy server.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "proxy-port",
-        bool_flag: false,
-        env: "SONAR_SCANNER_PROXY_PORT",
-        property: props::PROXY_PORT,
-        usage: r##"
+};
+
+pub const PROXY_PORT: &'static OptDesc = &OptDesc {
+    option: "proxy-port",
+    bool_flag: false,
+    env: "SONAR_SCANNER_PROXY_PORT",
+    property: "sonar.scanner.proxyPort",
+    usage: r##"
     --proxy-port=<PORT>           The port of the proxy server.
                    Default value: <same port as sonar.host.url>
 "##,
-    },
-    OptDesc {
-        option: "proxy-user",
-        bool_flag: false,
-        env: "SONAR_SCANNER_PROXY_USER",
-        property: props::PROXY_USER,
-        usage: r##"
+};
+
+pub const PROXY_USER: &'static OptDesc = &OptDesc {
+    option: "proxy-user",
+    bool_flag: false,
+    env: "SONAR_SCANNER_PROXY_USER",
+    property: "sonar.scanner.proxyUser",
+    usage: r##"
     --proxy-user=<USER>           In case of an authenticated proxy: the user name.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "proxy-password",
-        bool_flag: false,
-        env: "SONAR_SCANNER_PROXY_PASSWORD",
-        property: props::PROXY_PASSWORD,
-        usage: r##"
+};
+
+pub const PROXY_PASSWORD: &'static OptDesc = &OptDesc {
+    option: "proxy-password",
+    bool_flag: false,
+    env: "SONAR_SCANNER_PROXY_PASSWORD",
+    property: "sonar.scanner.proxyPassword",
+    usage: r##"
     --proxy-password=<PASSWORD>   In case of an authenticated proxy: the user password.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "sonar-home",
-        bool_flag: false,
-        env: "SONAR_USER_HOME",
-        property: props::SONAR_HOME,
-        usage: r##"
+};
+
+pub const SONAR_HOME: &'static OptDesc = &OptDesc {
+    option: "sonar-home",
+    bool_flag: false,
+    env: "SONAR_USER_HOME",
+    property: "sonar.userHome",
+    usage: r##"
     --sonar-home=<PATH>           The directory for the scanner cache.
                    Default value: ${HOME}/.sonar
 "##,
-    },
-    OptDesc {
-        option: "java-opts",
-        bool_flag: false,
-        env: "SONAR_SCANNER_JAVA_OPTS",
-        property: props::JAVA_OPTS,
-        usage: r##"
+};
+
+pub const JAVA_OPTS: &'static OptDesc = &OptDesc {
+    option: "java-opts",
+    bool_flag: false,
+    env: "SONAR_SCANNER_JAVA_OPTS",
+    property: "sonar.scanner.javaOpts",
+    usage: r##"
     --java-opts=<OPTS>            Arguments to pass to the JVM running the scanner engine.
                    Default value: <empty>
 "##,
-    },
-    OptDesc {
-        option: "work-dir",
-        bool_flag: false,
-        env: "SONAR_SCANNER_WORK_DIR",
-        property: props::WORKING_DIR,
-        usage: r##"
+};
+
+pub const WORKING_DIR: &'static OptDesc = &OptDesc {
+    option: "work-dir",
+    bool_flag: false,
+    env: "SONAR_SCANNER_WORK_DIR",
+    property: "sonar.working.directory",
+    usage: r##"
     --work-dir=<DIR>              Path to the working directory used by the SonarScanner during a
                                   project analysis to store temporary data. The path can be relative
                                   (to the sonar.projectBaseDir property) or absolute.
                    Default value: .scannerwork
 "##,
-    },
-    OptDesc {
-        option: "verbose",
-        bool_flag: true,
-        env: "SONAR_VERBOSE",
-        property: props::VERBOSE,
-        usage: r##"
+};
+
+pub const VERBOSE: &'static OptDesc = &OptDesc {
+    option: "verbose",
+    bool_flag: true,
+    env: "SONAR_VERBOSE",
+    property: "sonar.verbose",
+    usage: r##"
     --verbose                     When present, adds more details to the analysis logs by activating
                                   the DEBUG mode for the scanner.
                    Default value: false
 "##,
-    },
-    OptDesc {
-        option: "log",
-        bool_flag: false,
-        env: "SONAR_LOG_LEVEL",
-        property: props::LOG_LEVEL,
-        usage: r##"
+};
+
+pub const LOG_LEVEL: &'static OptDesc = &OptDesc {
+    option: "log",
+    bool_flag: false,
+    env: "SONAR_LOG_LEVEL",
+    property: "sonar.log.level",
+    usage: r##"
     --log=<LEVEL>                 The log level.
                                   Possible values: INFO, DEBUG, TRACE
                    Default value: <if sonar.verbose then DEBUG else INFO>
 "##,
-    },
-    OptDesc {
-        option: "truststore-path",
-        bool_flag: false,
-        env: "SONAR_SCANNER_TRUSTSTORE_PATH",
-        property: props::TRUSTSTORE_PATH,
-        usage: r##"
+};
+
+pub const TRUSTSTORE_PATH: &'static OptDesc = &OptDesc {
+    option: "truststore-path",
+    bool_flag: false,
+    env: "SONAR_SCANNER_TRUSTSTORE_PATH",
+    property: "sonar.scanner.truststorePath",
+    usage: r##"
     --truststore-path=<PATH>      The path to the truststore file.
                    Default value: <sonar.userHome>/ssl/truststore.p12
 "##,
-    },
-    OptDesc {
-        option: "truststore-password",
-        bool_flag: false,
-        env: "SONAR_SCANNER_TRUSTSTORE_PASSWORD",
-        property: props::TRUSTSTORE_PASSWORD,
-        usage: r##"
+};
+
+pub const TRUSTSTORE_PASSWORD: &'static OptDesc = &OptDesc {
+    option: "truststore-password",
+    bool_flag: false,
+    env: "SONAR_SCANNER_TRUSTSTORE_PASSWORD",
+    property: "sonar.scanner.truststorePassword",
+    usage: r##"
     --truststore-password=<PASS>  The password of the truststore.
                    Default value: changeit
 "##,
-    },
-    OptDesc {
-        option: "keystore-path",
-        bool_flag: false,
-        env: "SONAR_SCANNER_KEYSTORE_PATH",
-        property: props::KEYSTORE_PATH,
-        usage: r##"
+};
+
+pub const KEYSTORE_PATH: &'static OptDesc = &OptDesc {
+    option: "keystore-path",
+    bool_flag: false,
+    env: "SONAR_SCANNER_KEYSTORE_PATH",
+    property: "sonar.scanner.keystorePath",
+    usage: r##"
     --keystore-path=<PATH>        The path to the keystore file.
                    Default value: <sonar.userHome>/ssl/keystore.p12
 "##,
-    },
-    OptDesc {
-        option: "keystore-password",
-        bool_flag: false,
-        env: "SONAR_SCANNER_KEYSTORE_PASSWORD",
-        property: props::KEYSTORE_PASSWORD,
-        usage: r##"
+};
+
+pub const KEYSTORE_PASSWORD: &'static OptDesc = &OptDesc {
+    option: "keystore-password",
+    bool_flag: false,
+    env: "SONAR_SCANNER_KEYSTORE_PASSWORD",
+    property: "sonar.scanner.keystorePassword",
+    usage: r##"
     --keystore-password=<PASS>    The password of the keystore file.
                    Default value: sonar
 "##,
-    },
-    OptDesc {
-        option: "encoding",
-        bool_flag: false,
-        env: "SONAR_SOURCE_ENCODING",
-        property: props::SOURCE_ENCODING,
-        usage: r##"
+};
+
+pub const SOURCE_ENCODING: &'static OptDesc = &OptDesc {
+    option: "encoding",
+    bool_flag: false,
+    env: "SONAR_SOURCE_ENCODING",
+    property: "sonar.sourceEncoding",
+    usage: r##"
     --encoding=<ENCODING>         Encoding of the source files.
                    Default value: <system encoding>
 "##,
-    },
-    OptDesc {
-        option: "scanner-cli-version",
-        bool_flag: false,
-        env: "SONAR_SCANNER_INTERNAL_CLI_VERSION",
-        property: props::CLI_VERSION,
-        usage: r##"
+};
+
+pub const CLI_VERSION: &'static OptDesc = &OptDesc {
+    option: "scanner-cli-version",
+    bool_flag: false,
+    env: "SONAR_SCANNER_INTERNAL_CLI_VERSION",
+    property: "sonar.scanner.internal.cli.version",
+    usage: r##"
     --scanner-cli-version=<VER>   Force the analysis to download this version of the scanner from
                                   binaries.sonarsource.com instead of using the one provided by the
                                   sonar-scan executable.
                    Default value: <the version embedded in the sonar-scan executable>
 "##,
-    },
-    OptDesc {
-        option: "dump",
-        bool_flag: true,
-        env: "SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES",
-        property: props::DUMP_PROPERTIES,
-        usage: r##"
+};
+
+pub const DUMP_PROPERTIES: &'static OptDesc = &OptDesc {
+    option: "dump",
+    bool_flag: true,
+    env: "SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES",
+    property: "sonar.scanner.internal.dump.properties",
+    usage: r##"
     --dump                        Print all resolved options as JSON and exit.
                    Default value: false
 "##,
-    },
-];
+};
 
 pub const HELP_START: &str = r##"
 Run SonarQube analysis on a project without modifying your build configuration.
@@ -473,7 +564,8 @@ impl LogLevel {
             "DEBUG" => Ok(LogLevel::DEBUG),
             "TRACE" => Ok(LogLevel::TRACE),
             _ => Err(format!(
-                "Invalid '{}' value '{s}', expected 'INFO', 'DEBUG' or 'TRACE'.", props::LOG_LEVEL
+                "Invalid '{}' value '{s}', expected 'INFO', 'DEBUG' or 'TRACE'.",
+                LOG_LEVEL.property
             )),
         }
     }
@@ -487,13 +579,21 @@ pub struct ScannerOptions {
     pub other_args: Vec<String>,
 }
 
+pub struct OptDesc {
+    pub option: &'static str,
+    pub bool_flag: bool,
+    pub env: &'static str,
+    pub property: &'static str,
+    pub usage: &'static str,
+}
+
 impl ScannerOptions {
     pub fn project_base_directory(&self) -> Result<PathBuf, String> {
-        self.required_path(props::PROJECT_BASE_DIR)
+        self.required_path(PROJECT_BASE_DIR.property)
     }
 
     pub fn log_level(&self) -> LogLevel {
-        if let Some(level) = self.optional(props::LOG_LEVEL) {
+        if let Some(level) = self.get(LOG_LEVEL) {
             LogLevel::parse(level).unwrap_or_else(|_| LogLevel::INFO)
         } else {
             LogLevel::INFO
@@ -506,23 +606,35 @@ impl ScannerOptions {
     }
 
     pub fn sonar_home(&self) -> Result<PathBuf, String> {
-        Ok(PathBuf::from(self.required(props::SONAR_HOME)?))
+        Ok(PathBuf::from(self.required(SONAR_HOME)?))
     }
 
     pub fn sonar_cache(&self) -> Result<PathBuf, String> {
         Ok(self.sonar_home()?.join("cache"))
     }
 
-    pub fn required(&self, property: &str) -> Result<&String, String> {
-        if let Some(url) = self.sonar_properties.get(property) {
+    pub fn required(&self, opt: &OptDesc) -> Result<&String, String> {
+        if let Some(url) = self.get(opt) {
             Ok(url)
         } else {
-            Err(format!("Missing required property: {property}"))
+            Err(format!("Missing required property: {}", opt.property))
         }
     }
 
-    pub fn optional(&self, property: &str) -> Option<&String> {
-        self.sonar_properties.get(property)
+    pub fn has(&self, opt: &OptDesc) -> bool {
+        self.sonar_properties.contains_key(opt.property)
+    }
+
+    pub fn get(&self, opt: &OptDesc) -> Option<&String> {
+        self.sonar_properties.get(opt.property)
+    }
+
+    pub fn set(&mut self, opt: &OptDesc, value: String) -> Option<String> {
+        self.sonar_properties.insert(opt.property.to_owned(), value)
+    }
+
+    pub fn set_str(&mut self, opt: &OptDesc, value: &str) -> Option<String> {
+        self.sonar_properties.insert(opt.property.to_owned(), value.to_owned())
     }
 
     pub fn required_path(&self, property: &str) -> Result<PathBuf, String> {
@@ -536,8 +648,8 @@ impl ScannerOptions {
         }
     }
 
-    pub fn is_true(&self, property: &str) -> bool {
-        if let Some(value) = self.sonar_properties.get(property) {
+    pub fn is_true(&self, opt: &OptDesc) -> bool {
+        if let Some(value) = self.get(opt) {
             value == "true"
         } else {
             false
@@ -640,7 +752,6 @@ pub fn parse_options(
     Ok(options)
 }
 
-
 fn add_missing_options_from_env(
     options: &mut ScannerOptions,
     env_fn: &dyn Fn(&str) -> Option<String>,
@@ -704,11 +815,11 @@ fn add_options_from_args(options: &mut ScannerOptions, args: &[String]) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::env;
     use super::*;
     use indoc::indoc;
     use regex::Regex;
+    use std::collections::HashMap;
+    use std::env;
     use tempfile::tempdir;
 
     fn cur_dir() -> String {
@@ -721,22 +832,24 @@ mod tests {
 
     fn remove_os(input: &str) -> String {
         let re = Regex::new(r#""sonar\.scanner\.os": "(?:linux|alpine|macos|windows)""#).unwrap();
-        re.replace(input, r#""sonar.scanner.os"": "<os>""#).to_string()
+        re.replace(input, r#""sonar.scanner.os"": "<os>""#)
+            .to_string()
     }
 
     fn remove_arch(input: &str) -> String {
         let re = Regex::new(r#""sonar\.scanner\.arch": "(?:aarch64|x64)""#).unwrap();
-        re.replace(input, r#""sonar.scanner.arch"": "<arch>""#).to_string()
+        re.replace(input, r#""sonar.scanner.arch"": "<arch>""#)
+            .to_string()
     }
 
     fn json_from_parse_options(args: &[&str], env: &[(&str, &str)]) -> Result<String, String> {
         let string_args: Vec<String> = args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
         let env_map: HashMap<&str, &str> = env.iter().copied().collect();
-        let env_closure = |key: &str| -> Option<String> {
-            env_map.get(key).map(|val| val.to_string())
-        };
+        let env_closure =
+            |key: &str| -> Option<String> { env_map.get(key).map(|val| val.to_string()) };
         let options = parse_options(&string_args, &env_closure)?;
-        let mut json = options.to_json()
+        let mut json = options
+            .to_json()
             .replace(&cur_dir(), "<current-dir>")
             .replace(&user_dir(), "<user-home>");
         json = remove_os(&json);
@@ -748,9 +861,7 @@ mod tests {
     #[test]
     fn parse_options_defaults() -> Result<(), String> {
         assert_eq!(
-            json_from_parse_options(
-                /*args*/&[],
-                /*env*/&[])?,
+            json_from_parse_options(/*args*/ &[], /*env*/ &[])?,
             indoc! {r#"
         {
           "sonar_properties": {
@@ -788,7 +899,8 @@ mod tests {
 
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[
+                /*args*/
+                &[
                     "--token=sqa_1234567890",
                     format!("--dir={project_dir_str}").as_str(),
                     "--url=http://localhost:9000",
@@ -818,7 +930,8 @@ mod tests {
                     "--work-dir=.custom-work-dir",
                     "--verbose",
                     "--log=DEBUG",
-                    format!("--truststore-path={home_dir}/custom-truststore/ssl/truststore.p12").as_str(),
+                    format!("--truststore-path={home_dir}/custom-truststore/ssl/truststore.p12")
+                        .as_str(),
                     "--truststore-password=TruststorePassword",
                     format!("--keystore-path={home_dir}/custom-keystore/ssl/keystore.p12").as_str(),
                     "--keystore-password=KeystorePassword",
@@ -826,8 +939,9 @@ mod tests {
                     "--scanner-cli-version=7.2.0.5079",
                     "--dump",
                 ],
-                /*env*/&[])?
-                .replace(&tmp_dir_str, "<tmp-dir>"),
+                /*env*/ &[]
+            )?
+            .replace(&tmp_dir_str, "<tmp-dir>"),
             indoc! {r#"
         {
           "sonar_properties": {
@@ -894,46 +1008,81 @@ mod tests {
 
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[
-                    "--token", "sqa_1234567890",
-                    "--dir", &project_dir_str,
-                    "--url", "http://localhost:9000",
-                    "--org", "BigCorp",
-                    "--region", "us",
-                    "--key", "my-project-key",
-                    "--name", "My Project Name",
-                    "--version", "1.2.3",
-                    "--description", "Main Application",
-                    "--build-number", "42",
-                    "--sources", "src/main/java",
-                    "--tests", "src/test/java",
-                    "--java-binaries", "target/classes",
-                    "--java-libraries", "target/libs/*.jar",
-                    "--java-test-binaries", "target/test-classes",
-                    "--java-test-libraries", "target/libs/*.jar,target/test-libs/*.jar",
-                    "--os", "windows",
-                    "--arch", "x64",
+                /*args*/
+                &[
+                    "--token",
+                    "sqa_1234567890",
+                    "--dir",
+                    &project_dir_str,
+                    "--url",
+                    "http://localhost:9000",
+                    "--org",
+                    "BigCorp",
+                    "--region",
+                    "us",
+                    "--key",
+                    "my-project-key",
+                    "--name",
+                    "My Project Name",
+                    "--version",
+                    "1.2.3",
+                    "--description",
+                    "Main Application",
+                    "--build-number",
+                    "42",
+                    "--sources",
+                    "src/main/java",
+                    "--tests",
+                    "src/test/java",
+                    "--java-binaries",
+                    "target/classes",
+                    "--java-libraries",
+                    "target/libs/*.jar",
+                    "--java-test-binaries",
+                    "target/test-classes",
+                    "--java-test-libraries",
+                    "target/libs/*.jar,target/test-libs/*.jar",
+                    "--os",
+                    "windows",
+                    "--arch",
+                    "x64",
                     "--skip-jre-provisioning",
-                    "--java-exe-path", &java_exe_str,
-                    "--proxy-host", "https://proxy.bigcorp.com",
-                    "--proxy-port", "666",
-                    "--proxy-user", "paul",
-                    "--proxy-password", "Paul123456",
-                    "--sonar-home", format!("{home_dir}/.sonar-custom").as_str(),
-                    "--java-opts", "-Xmx1024m",
-                    "--work-dir", ".custom-work-dir",
+                    "--java-exe-path",
+                    &java_exe_str,
+                    "--proxy-host",
+                    "https://proxy.bigcorp.com",
+                    "--proxy-port",
+                    "666",
+                    "--proxy-user",
+                    "paul",
+                    "--proxy-password",
+                    "Paul123456",
+                    "--sonar-home",
+                    format!("{home_dir}/.sonar-custom").as_str(),
+                    "--java-opts",
+                    "-Xmx1024m",
+                    "--work-dir",
+                    ".custom-work-dir",
                     "--verbose",
-                    "--log", "DEBUG",
-                    "--truststore-path", format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str(),
-                    "--truststore-password", "TruststorePassword",
-                    "--keystore-path", format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str(),
-                    "--keystore-password", "KeystorePassword",
-                    "--encoding", "UTF-8",
-                    "--scanner-cli-version", "7.2.0.5079",
+                    "--log",
+                    "DEBUG",
+                    "--truststore-path",
+                    format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str(),
+                    "--truststore-password",
+                    "TruststorePassword",
+                    "--keystore-path",
+                    format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str(),
+                    "--keystore-password",
+                    "KeystorePassword",
+                    "--encoding",
+                    "UTF-8",
+                    "--scanner-cli-version",
+                    "7.2.0.5079",
                     "--dump",
                 ],
-                /*env*/&[])?
-                .replace(&tmp_dir_str, "<tmp-dir>"),
+                /*env*/ &[]
+            )?
+            .replace(&tmp_dir_str, "<tmp-dir>"),
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1000,8 +1149,9 @@ mod tests {
 
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[],
-                /*env*/&[
+                /*args*/ &[],
+                /*env*/
+                &[
                     ("SONAR_TOKEN", "sqa_1234567890"),
                     ("SONAR_BASE_DIR", &project_dir_str),
                     ("SONAR_HOST_URL", "http://localhost:9000"),
@@ -1017,7 +1167,10 @@ mod tests {
                     ("SONAR_JAVA_BINARIES", "target/classes"),
                     ("SONAR_JAVA_LIBRARIES", "target/libs/*.jar"),
                     ("SONAR_JAVA_TEST_BINARIES", "target/test-classes"),
-                    ("SONAR_JAVA_TEST_LIBRARIES", "target/libs/*.jar,target/test-libs/*.jar"),
+                    (
+                        "SONAR_JAVA_TEST_LIBRARIES",
+                        "target/libs/*.jar,target/test-libs/*.jar"
+                    ),
                     ("SONAR_SCANNER_OS", "windows"),
                     ("SONAR_SCANNER_ARCH", "x64"),
                     ("SONAR_SCANNER_SKIP_JRE_PROVISIONING", "true"),
@@ -1026,20 +1179,30 @@ mod tests {
                     ("SONAR_SCANNER_PROXY_PORT", "666"),
                     ("SONAR_SCANNER_PROXY_USER", "paul"),
                     ("SONAR_SCANNER_PROXY_PASSWORD", "Paul123456"),
-                    ("SONAR_USER_HOME", format!("{home_dir}/.sonar-custom").as_str()),
+                    (
+                        "SONAR_USER_HOME",
+                        format!("{home_dir}/.sonar-custom").as_str()
+                    ),
                     ("SONAR_SCANNER_JAVA_OPTS", "-Xmx1024m"),
                     ("SONAR_SCANNER_WORK_DIR", ".custom-work-dir"),
                     ("SONAR_VERBOSE", "true"),
                     ("SONAR_LOG_LEVEL", "DEBUG"),
-                    ("SONAR_SCANNER_TRUSTSTORE_PATH", format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str()),
+                    (
+                        "SONAR_SCANNER_TRUSTSTORE_PATH",
+                        format!("{home_dir}/custom-truststore/ssl/truststore.p12").as_str()
+                    ),
                     ("SONAR_SCANNER_TRUSTSTORE_PASSWORD", "TruststorePassword"),
-                    ("SONAR_SCANNER_KEYSTORE_PATH", format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str()),
+                    (
+                        "SONAR_SCANNER_KEYSTORE_PATH",
+                        format!("{home_dir}/custom-keystore/ssl/keystore.p12").as_str()
+                    ),
                     ("SONAR_SCANNER_KEYSTORE_PASSWORD", "KeystorePassword"),
                     ("SONAR_SOURCE_ENCODING", "UTF-8"),
                     ("SONAR_SCANNER_INTERNAL_CLI_VERSION", "7.2.0.5079"),
                     ("SONAR_SCANNER_INTERNAL_DUMP_PROPERTIES", "true"),
-                ])?
-                .replace(&tmp_dir_str, "<tmp-dir>"),
+                ]
+            )?
+            .replace(&tmp_dir_str, "<tmp-dir>"),
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1093,12 +1256,15 @@ mod tests {
     fn parse_options_unknown_arg_becomes_other_args() -> Result<(), String> {
         assert_eq!(
             json_from_parse_options(
-                /*args*/&[
+                /*args*/
+                &[
                     "--some-custom-prop=hello",
-                "--some-other-prop", "hello",
-                "-Dsonar.unknown.prop=123",
+                    "--some-other-prop",
+                    "hello",
+                    "-Dsonar.unknown.prop=123",
                 ],
-                /*env*/&[])?,
+                /*env*/ &[]
+            )?,
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1129,18 +1295,24 @@ mod tests {
     fn parse_options_override_env_vars() -> Result<(), String> {
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[
-                    "--token", "sqa_1234567890",
-                    "--url", "http://localhost:9000",
-                    "--org", "BigCorp",
+                /*args*/
+                &[
+                    "--token",
+                    "sqa_1234567890",
+                    "--url",
+                    "http://localhost:9000",
+                    "--org",
+                    "BigCorp",
                     "--verbose=false",
                 ],
-                /*env*/&[
+                /*env*/
+                &[
                     ("SONAR_TOKEN", "sqa_6666666666"),
                     ("SONAR_HOST_URL", "http://my.server.com:9000"),
                     ("SONAR_ORGANIZATION", "DefaultCorp"),
                     ("SONAR_VERBOSE", "true"),
-                ])?,
+                ]
+            )?,
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1167,11 +1339,9 @@ mod tests {
     fn parse_no_region_custom_url_select_sonarqube_server() -> Result<(), String> {
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[
-                    "--url", "https://server.com",
-                    "--org", "BigCorp",
-                ],
-                /*env*/&[])?,
+                /*args*/ &["--url", "https://server.com", "--org", "BigCorp",],
+                /*env*/ &[]
+            )?,
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1195,11 +1365,7 @@ mod tests {
     #[test]
     fn parse_region_us() -> Result<(), String> {
         assert_eq!(
-            json_from_parse_options(
-                /*args*/            &[
-                    "--region", "us",
-                ],
-                /*env*/&[])?,
+            json_from_parse_options(/*args*/ &["--region", "us",], /*env*/ &[])?,
             indoc! {r#"
         {
           "sonar_properties": {
@@ -1225,10 +1391,9 @@ mod tests {
     fn parse_sonarcloud_dev_eu() -> Result<(), String> {
         assert_eq!(
             json_from_parse_options(
-                /*args*/            &[
-                    "--url", "https://dev5.sc-dev5.io",
-                ],
-                /*env*/&[])?,
+                /*args*/ &["--url", "https://dev5.sc-dev5.io",],
+                /*env*/ &[]
+            )?,
             indoc! {r#"
         {
           "sonar_properties": {

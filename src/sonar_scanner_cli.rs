@@ -1,8 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
-use crate::log;
+use crate::{log, options};
 use crate::options::ScannerOptions;
-use crate::props;
 
 const SONAR_SCANNER_CLI_JAR: &[u8] =
     include_bytes!("../resources/sonar-scanner-cli/sonar-scanner-cli.jar");
@@ -30,16 +29,16 @@ const SCANNER_DIR: &str = "sonar-scanner-{version}-{os}-{arch}";
 /// The path to the scanner executable.
 ///
 pub fn download_scanner(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBuf, String> {
-    let effective_version = options.optional(props::CLI_VERSION)
+    let effective_version = options.get(options::CLI_VERSION)
         .map(|s| s.as_str())
         .unwrap_or(SONAR_SCANNER_CLI_JAR_VERSION);
-    let scanner_os = match options.required(props::OS)?.as_str() {
+    let scanner_os = match options.required(options::OS)?.as_str() {
         "mac" | "macos" | "darwin" => "macosx",
         "alpine" => "linux",
         "win" | "win32" => "windows",
         other => other,
     };
-    let scanner_arch = options.required(props::ARCH)?.as_str();
+    let scanner_arch = options.required(options::ARCH)?.as_str();
 
     let url = SCANNER_URL
         .replace("{version}", effective_version)
@@ -101,7 +100,7 @@ pub fn download_jre_extract_scanner(
     options: &ScannerOptions,
     out: &mut impl Write,
 ) -> Result<ScannerPaths, String> {
-    let java_exe = if let Some(path) = options.optional(props::JAVA_EXE_PATH) {
+    let java_exe = if let Some(path) = options.get(options::JAVA_EXE_PATH) {
         PathBuf::from(&path)
     } else {
         download_jre(options, out)?
@@ -112,11 +111,11 @@ pub fn download_jre_extract_scanner(
 }
 
 fn download_jre(options: &ScannerOptions, out: &mut impl Write) -> Result<PathBuf, String> {
-    let base_url = options.required(props::API_BASE_URL)?;
-    let bearer = format!("Bearer {}", options.required(props::TOKEN)?);
+    let base_url = options.required(options::API_BASE_URL)?;
+    let bearer = format!("Bearer {}", options.required(options::TOKEN)?);
 
-    let os = options.required(props::OS)?.as_str();
-    let arch = options.required(props::ARCH)?.as_str();
+    let os = options.required(options::OS)?.as_str();
+    let arch = options.required(options::ARCH)?.as_str();
     let list_url = format!("{base_url}/analysis/jres?os={os}&arch={arch}");
     let response = ureq::get(&list_url)
         .header("Authorization", &bearer)

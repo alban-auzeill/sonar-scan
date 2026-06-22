@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use regex::Regex;
 use crate::options::{LogLevel, ScannerOptions};
-use crate::props;
+use crate::options;
 
 pub fn infer_missing_options(options: &mut ScannerOptions) -> Result<(), String> {
     initialize_log_level(options)?;
@@ -31,48 +31,48 @@ fn path_to_string(path: &Path) -> Result<&str, String> {
 }
 
 fn initialize_log_level(options: &mut ScannerOptions) -> Result<(), String> {
-    if let Some(level) = options.sonar_properties.get(props::LOG_LEVEL) {
+    if let Some(level) = options.get(options::LOG_LEVEL) {
         let upper_case_level = level.to_uppercase();
         LogLevel::parse(&upper_case_level)?;
-        options.sonar_properties.insert(props::LOG_LEVEL.to_string(), upper_case_level);
+        options.set(options::LOG_LEVEL, upper_case_level);
     }
     Ok(())
 }
 
 fn initialize_sonar_home(options: &mut ScannerOptions) -> Result<(), String> {
-    if !options.sonar_properties.contains_key(props::SONAR_HOME) {
+    if !options.has(options::SONAR_HOME) {
         let mut path = dirs::home_dir()
             .ok_or_else(|| "Could not determine the user's home directory.".to_owned())?;
         path.push(".sonar");
-        options.sonar_properties.insert(props::SONAR_HOME.to_string(), path_to_string(&path)?.to_owned());
+        options.set_str(options::SONAR_HOME, path_to_string(&path)?);
     }
     Ok(())
 }
 
 fn initialize_project_base_directory(options: &mut ScannerOptions) -> Result<(), String> {
-    let dir = if let Some(base_dir) = options.sonar_properties.get(props::PROJECT_BASE_DIR) {
+    let dir = if let Some(base_dir) = options.get(options::PROJECT_BASE_DIR) {
         PathBuf::from(base_dir)
             .canonicalize()
-            .map_err(|e| format!("Fail to canonicalize '{}' directory '{base_dir}': {e}", props::PROJECT_BASE_DIR))?
+            .map_err(|e| format!("Fail to canonicalize '{}' directory '{base_dir}': {e}", options::PROJECT_BASE_DIR.property))?
     } else {
         env::current_dir()
             .map_err(|e| format!("Fail access current directory: {e}"))?
             .canonicalize()
             .map_err(|e| format!("Fail to canonicalize the current directory: {e}"))?
     };
-    options.sonar_properties.insert(props::PROJECT_BASE_DIR.to_string(), path_to_string(&dir)?.to_owned());
+    options.set_str(options::PROJECT_BASE_DIR, path_to_string(&dir)?);
     Ok(())
 }
 
 fn initialize_java_exe_path(options: &mut ScannerOptions) -> Result<(), String> {
-    if let Some(path) = options.sonar_properties.get(props::JAVA_EXE_PATH) {
-        options.sonar_properties.insert(props::JAVA_EXE_PATH.to_string(), canonicalize_property(props::JAVA_EXE_PATH, path.as_str())?);
+    if let Some(path) = options.get(options::JAVA_EXE_PATH) {
+        options.set_str(options::JAVA_EXE_PATH, &canonicalize_property(options::JAVA_EXE_PATH.property, path.as_str())?);
     }
     Ok(())
 }
 
 fn initialize_java_binaries(options: &mut ScannerOptions) -> Result<(), String> {
-    if !options.sonar_properties.contains_key(props::JAVA_BINARIES) {
+    if !options.has(options::JAVA_BINARIES) {
         let dir = options.sonar_cache()?.join("empty_directory");
         let dir_str = dir
             .to_str()
@@ -80,25 +80,25 @@ fn initialize_java_binaries(options: &mut ScannerOptions) -> Result<(), String> 
         if let Err(e) = std::fs::create_dir_all(&dir) {
             return Err(format!("Failed to create directory '{}': {}", dir.display(), e));
         }
-        options.sonar_properties.insert(props::JAVA_BINARIES.to_owned(), dir_str.to_owned());
+        options.set_str(options::JAVA_BINARIES, dir_str);
     }
     Ok(())
 }
 
 fn initialize_proxy_port(options: &mut ScannerOptions) -> Result<(), String> {
-    if options.sonar_properties.contains_key(props::PROXY_HOST) {
-        if let Some(port_str) = options.sonar_properties.get(props::PROXY_PORT) {
+    if options.has(options::PROXY_HOST) {
+        if let Some(port_str) = options.get(options::PROXY_PORT) {
             let port: u16 =port_str.parse().map_err(|_| format!("Invalid proxy port: {}", port_str))?;
-            options.sonar_properties.insert("sonar.scanner.proxyPort".to_string(), port.to_string());
+            options.set_str(options::PROXY_PORT, &port.to_string());
         }
     }
     Ok(())
 }
 
 fn initialize_name(options: &mut ScannerOptions) {
-    if !options.sonar_properties.contains_key(props::PROJECT_NAME) {
-        if let Some(key) = options.sonar_properties.get(props::PROJECT_KEY) {
-            options.sonar_properties.insert(props::PROJECT_NAME.to_string(), key.clone());
+    if !options.has(options::PROJECT_NAME) {
+        if let Some(key) = options.get(options::PROJECT_KEY) {
+            options.set_str(options::PROJECT_NAME, &key.clone());
         }
     }
 }
@@ -125,16 +125,16 @@ fn clean_url(url: &str) -> String {
 
 fn initialize_host_url(options: &mut ScannerOptions) -> Result<(), String> {
     // Step 1: Clean known URL properties
-    for key in [props::HOST_URL, props::SONARCLOUD_URL, props::API_BASE_URL] {
-        if let Some(url) = options.sonar_properties.get(key).cloned() {
-            options.sonar_properties.insert(key.to_string(), clean_url(&url));
+    for opt in [options::HOST_URL, options::SONARCLOUD_URL, options::API_BASE_URL] {
+        if let Some(url) = options.get(opt) {
+            options.set_str(opt, &clean_url(&url.clone()));
         }
     }
 
     // Step 2: Validate sonar.region (only 'us' or empty/absent are supported)
-    let region_is_set = options.sonar_properties.contains_key(props::REGION);
-    let region = options.sonar_properties
-        .get(props::REGION)
+    let region_is_set = options.has(options::REGION);
+    let region = options
+        .get(options::REGION)
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     if !region.is_empty() && region != "us" {
@@ -147,8 +147,8 @@ fn initialize_host_url(options: &mut ScannerOptions) -> Result<(), String> {
     }
 
     // Step 3: Determine host URL and whether this is SonarQube Cloud
-    let host_url = options.sonar_properties.get(props::HOST_URL).cloned();
-    let sonarcloud_url = options.sonar_properties.get(props::SONARCLOUD_URL).cloned();
+    let host_url = options.get(options::HOST_URL).cloned();
+    let sonarcloud_url = options.get(options::SONARCLOUD_URL).cloned();
 
     let is_sonar_cloud = match (&host_url, &sonarcloud_url) {
         (Some(host), Some(cloud)) => {
@@ -165,34 +165,34 @@ fn initialize_host_url(options: &mut ScannerOptions) -> Result<(), String> {
         }
         (None, Some(cloud)) => {
             // Only sonarcloudUrl is set — mirror it into host.url
-            options.sonar_properties.insert(props::HOST_URL.to_string(), cloud.clone());
+            options.set_str(options::HOST_URL, cloud);
             true
         }
         (None, None) => {
             // No URL set — pick default based on region
             let cloud_url = if region == "us" { "https://sonarqube.us" } else { "https://sonarcloud.io" };
-            options.sonar_properties.insert(props::HOST_URL.to_string(), cloud_url.to_string());
-            options.sonar_properties.insert(props::SONARCLOUD_URL.to_string(), cloud_url.to_string());
+            options.set_str(options::HOST_URL, cloud_url);
+            options.set_str(options::SONARCLOUD_URL, cloud_url);
             true
         }
         (Some(host), None) => {
             // host.url is set — classify by URL pattern or explicit region
             if is_sonarqube_cloud_us(host) {
-                options.sonar_properties.insert(props::SONARCLOUD_URL.to_string(), host.to_string());
+                options.set_str(options::SONARCLOUD_URL, host);
                 if !region_is_set {
-                    options.sonar_properties.insert(props::REGION.to_string(), "us".to_string());
+                    options.set_str(options::REGION, "us");
                 }
                 true
             } else if is_sonarqube_cloud_eu(host) {
-                options.sonar_properties.insert(props::SONARCLOUD_URL.to_string(), host.to_string());
+                options.set_str(options::SONARCLOUD_URL, host);
                 if !region_is_set {
-                    options.sonar_properties.insert(props::REGION.to_string(), String::new());
+                    options.set_str(options::REGION, "");
                 }
                 true
             } else if region_is_set && (region == "us" || region.is_empty()) {
                 // Custom SonarCloud URL (staging/dev) indicated by explicit region
-                if !options.sonar_properties.contains_key(props::SONARCLOUD_URL) {
-                    options.sonar_properties.insert(props::SONARCLOUD_URL.to_string(), host.clone());
+                if !options.has(options::SONARCLOUD_URL) {
+                    options.set_str(options::SONARCLOUD_URL, host);
                 }
                 true
             } else {
@@ -202,15 +202,12 @@ fn initialize_host_url(options: &mut ScannerOptions) -> Result<(), String> {
         }
     };
 
-    options.sonar_properties.insert(
-        props::IS_SONARCLOUD.to_string(),
-        is_sonar_cloud.to_string(),
-    );
+    options.sonar_properties.insert(options::IS_SONARCLOUD.to_string(), is_sonar_cloud.to_string());
 
     // Step 4: Set apiBaseUrl if not already present
-    if !options.sonar_properties.contains_key(props::API_BASE_URL) {
-        let host = options.sonar_properties
-            .get(props::HOST_URL)
+    if !options.has(options::API_BASE_URL) {
+        let host = options
+            .get(options::HOST_URL)
             .cloned()
             .unwrap_or_default();
         let api_base_url = if is_sonar_cloud {
@@ -219,20 +216,20 @@ fn initialize_host_url(options: &mut ScannerOptions) -> Result<(), String> {
         } else {
             format!("{host}/api/v2")
         };
-        options.sonar_properties.insert(props::API_BASE_URL.to_string(), api_base_url);
+        options.set(options::API_BASE_URL, api_base_url);
     }
 
     Ok(())
 }
 
 fn initialize_key(options: &mut ScannerOptions) -> Result<(), String> {
-    if !options.sonar_properties.contains_key(props::PROJECT_KEY) {
+    if !options.has(options::PROJECT_KEY) {
         let key = if let Some(name) = git_repository_name(&options) {
             name
         } else {
             project_base_directory_name(&options)?
         };
-        options.sonar_properties.insert(props::PROJECT_KEY.to_owned(), key.to_owned());
+        options.set_str(options::PROJECT_KEY, &key);
     }
     Ok(())
 }
@@ -241,7 +238,7 @@ fn project_base_directory_name(options: &ScannerOptions) -> Result<String, Strin
     let base_dir = options.project_base_directory()?;
     let key = base_dir
         .file_name()
-        .ok_or_else(|| format!("'file_name()' is empty for '{}'", props::PROJECT_BASE_DIR))?
+        .ok_or_else(|| format!("'file_name()' is empty for '{}'", options::PROJECT_BASE_DIR.property))?
         .to_str()
         .ok_or_else(|| "Path contains invalid UTF-8".to_string())?;
     Ok(key.to_owned())
@@ -277,7 +274,7 @@ fn git_repository_name(options: &ScannerOptions) -> Option<String> {
 }
 
 fn initialize_os(options: &mut ScannerOptions) -> Result<(), String> {
-    let validated_os = if let Some(os) = options.sonar_properties.get(props::OS) {
+    let validated_os = if let Some(os) = options.get(options::OS) {
         match os.to_lowercase().as_str() {
             "linux" | "gnu/linux" | "unix" => "linux",
             "alpine" | "alpinelinux" | "alpine-linux" => "alpine",
@@ -286,12 +283,12 @@ fn initialize_os(options: &mut ScannerOptions) -> Result<(), String> {
             s if s.starts_with("mingw") || s.starts_with("cygwin") || s.starts_with("msys") => {
                 "windows"
             }
-            _ => os,
+            _ => &os.clone(),
         }
     } else {
         default_os()?
     };
-    options.sonar_properties.insert(props::OS.to_owned(), validated_os.to_owned());
+    options.set_str(options::OS, validated_os);
     Ok(())
 }
 
@@ -310,16 +307,16 @@ pub fn default_os() -> Result<&'static str, String> {
 }
 
 fn initialize_arch(options: &mut ScannerOptions) -> Result<(), String> {
-    let validated_arch = if let Some(arch) = options.sonar_properties.get(props::ARCH) {
+    let validated_arch = if let Some(arch) = options.get(options::ARCH) {
         match arch.to_lowercase().as_str() {
             "x64" | "x86_64" | "x86-64" | "amd64" => "x64",
             "aarch64" | "arm64" => "aarch64",
-            _ => arch,
+            _ => &arch.clone(),
         }
     } else {
         default_arch()?
     };
-    options.sonar_properties.insert(props::ARCH.to_owned(), validated_arch.to_owned());
+    options.set_str(options::ARCH, validated_arch);
     Ok(())
 }
 
