@@ -7,7 +7,7 @@
 # Install sonar-scan.exe to a directory on PATH:
 #   & ([scriptblock]::Create((Invoke-RestMethod 'https://my.sonarqube.com/scan.ps1'))) --install "$env:USERPROFILE\bin"
 
-$SONAR_SCAN_VERSION = "1.4.0"
+$SONAR_SCAN_VERSION = "1.5.0"
 
 # Detect architecture (PROCESSOR_ARCHITEW6432 is set when 32-bit PowerShell runs on a 64-bit OS)
 $arch = $null

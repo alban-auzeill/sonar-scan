@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-SONAR_SCAN_VERSION="1.4.0"
+SONAR_SCAN_VERSION="1.5.0"
 
 fn_scan() {
 
