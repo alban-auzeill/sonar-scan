@@ -47,6 +47,16 @@ build_target() {
   echo -e "\n${BOLD}[$triple]${RESET}"
 
   case "$triple" in
+    *-unknown-zos*)
+      if [[ "$(uname -s)" != "OS/390" ]]; then
+        echo -e "${YELLOW}  Skipped: z/OS targets require a z/OS host${RESET}"
+        return 0
+      fi
+      # z/OS is a tier-3 Rust target; rustup target add is not available
+      cargo +nightly build -Z build-std --release --target "$triple"
+      cp "target/$triple/release/$BINARY_NAME" "$DIST_DIR/$output"
+      ;;
+
     *-apple-darwin*)
       if [[ "$(uname -s)" != "Darwin" ]]; then
         echo -e "${YELLOW}  Skipped: macOS targets require a macOS host${RESET}"
@@ -122,6 +132,7 @@ main() {
   # So we use musl target because it is more portable, performance is not a problem, and we don't need to build gnu-linked binaries.
   build_target "x86_64-unknown-linux-musl"  "sonar-scan-x86_64-linux"
   build_target "aarch64-unknown-linux-musl" "sonar-scan-aarch64-linux"
+  build_target "s390x-unknown-linux-gnu"    "sonar-scan-s390x-linux"
 
   # Windows
   build_target "x86_64-pc-windows-msvc"    "sonar-scan-x86_64-windows.exe"
@@ -130,6 +141,9 @@ main() {
   # macOS
   build_target "x86_64-apple-darwin"       "sonar-scan-x86_64-macos"
   build_target "aarch64-apple-darwin"      "sonar-scan-aarch64-macos"
+
+  # IBM z/OS
+  build_target "s390x-unknown-zos"   "sonar-scan-s390x-zos"
 
   echo -e "\n${BOLD}Artifacts in $DIST_DIR/:${RESET}"
   ls -lh "$DIST_DIR/"

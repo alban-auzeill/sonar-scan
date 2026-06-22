@@ -8,6 +8,7 @@ fn_scan() {
   case "$(uname -m)" in
       x86_64|x86-64|amd64) _arch="x86_64" ;;
             aarch64|arm64) _arch="aarch64" ;;
+                    s390x) _arch="s390x" ;;
                         *) printf 'Unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
   esac
 
@@ -15,6 +16,7 @@ fn_scan() {
                     Darwin) _os_suffix="macos" ;;
                      Linux) _os_suffix="linux" ;;
       CYGWIN*|MINGW*|MSYS*) _os_suffix="windows.exe" ;;
+                    OS/390) _os_suffix="zos" ;;
                          *) printf 'Unsupported operating system: %s\n' "$(uname -s)" >&2; exit 1 ;;
   esac
 
